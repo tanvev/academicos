@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+
+# Production build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# System & OS files
+.DS_Store
+Thumbs.db
+
+# Temporary / Cache / Test files
+coverage/
+.cache/
+tmp/
+uploads/
+*.tmp
+
