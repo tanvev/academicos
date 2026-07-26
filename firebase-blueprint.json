@@ -1,0 +1,62 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile and global settings",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "timezone": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "onboardingCompleted": { "type": "boolean" },
+        "legacyMigrationCompletedAt": { "type": "string" },
+        "legacyMigrationVersion": { "type": "number" }
+      },
+      "required": ["uid", "email"]
+    },
+    "Program": {
+      "title": "Program",
+      "description": "Academic program or exam track",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "color": { "type": "string" },
+        "weeklyTargetHours": { "type": "number" },
+        "archived": { "type": "boolean" }
+      },
+      "required": ["id", "name", "type"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "Academic task or deadline",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "programId": { "type": "string" },
+        "dueDate": { "type": "string" },
+        "status": { "type": "string" },
+        "priority": { "type": "string" }
+      },
+      "required": ["id", "title", "programId", "dueDate", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Private user profile and settings"
+    },
+    "/users/{userId}/programs/{programId}": {
+      "schema": { "$ref": "#/entities/Program" },
+      "description": "User academic programs"
+    },
+    "/users/{userId}/tasks/{taskId}": {
+      "schema": { "$ref": "#/entities/Task" },
+      "description": "User tasks and deadlines"
+    }
+  }
+}

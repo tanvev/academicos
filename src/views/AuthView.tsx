@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Zap, ShieldCheck, Mail, Lock, User, ArrowRight, UserPlus, KeyRound, AlertCircle, Sparkles } from 'lucide-react';
+import { Zap, ShieldCheck, Mail, Lock, User, UserPlus, KeyRound, AlertCircle, Sparkles, Loader2 } from 'lucide-react';
 
 export const AuthView: React.FC = () => {
-  const { login, signup, googleSignIn, users, switchUser } = useApp();
+  const { login, signup, googleSignIn, resetPassword } = useApp();
 
   const [mode, setMode] = useState<'signin' | 'signup' | 'forgot'>('signin');
   const [email, setEmail] = useState('');
@@ -11,28 +11,54 @@ export const AuthView: React.FC = () => {
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setSuccessMsg(null);
+    setIsSubmitting(true);
 
-    if (mode === 'signup') {
-      if (!name.trim()) {
-        setError('Please enter your full name');
-        return;
+    try {
+      if (mode === 'signup') {
+        if (!name.trim()) {
+          setError('Please enter your full name');
+          setIsSubmitting(false);
+          return;
+        }
+        const res = await signup(email, password, name);
+        if (!res.success) {
+          setError(res.error || 'Failed to create account');
+        }
+      } else if (mode === 'signin') {
+        const res = await login(email, password);
+        if (!res.success) {
+          setError(res.error || 'Invalid credentials');
+        }
+      } else if (mode === 'forgot') {
+        const res = await resetPassword(email);
+        if (res.success) {
+          setSuccessMsg(res.message);
+        } else {
+          setError(res.message);
+        }
       }
-      const res = signup(email, password, name);
-      if (!res.success) {
-        setError(res.error || 'Failed to create account');
-      }
-    } else if (mode === 'signin') {
-      const res = login(email, password);
-      if (!res.success) {
-        setError(res.error || 'Invalid credentials');
-      }
-    } else if (mode === 'forgot') {
-      setSuccessMsg(`If an account exists for ${email}, password reset instructions have been sent.`);
+    } catch (err: any) {
+      setError(err.message || 'An unexpected authentication error occurred.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setError(null);
+    setIsSubmitting(true);
+    try {
+      await googleSignIn();
+    } catch (err: any) {
+      setError(err.message || 'Google sign-in failed');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -48,45 +74,15 @@ export const AuthView: React.FC = () => {
           <p className="text-xs text-teal-400 font-mono tracking-wider uppercase">Your Academic Operating System</p>
         </div>
 
-        {/* Existing Quick User Selection */}
-        {users.length > 0 && mode === 'signin' && (
-          <div className="space-y-2 pt-2 border-t border-[#27272A]">
-            <p className="text-[11px] font-mono text-slate-400 uppercase tracking-wider text-center">
-              Quick Switch Local Profiles
-            </p>
-            <div className="grid grid-cols-1 gap-2">
-              {users.map((u) => (
-                <button
-                  key={u.uid}
-                  type="button"
-                  onClick={() => switchUser(u.uid)}
-                  className="flex items-center justify-between p-3 rounded-xl bg-zinc-800/60 hover:bg-zinc-800 border border-[#27272A] transition-all text-left cursor-pointer group"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-teal-500/20 border border-teal-500/40 text-teal-300 font-bold text-xs flex items-center justify-center">
-                      {u.name ? u.name.charAt(0).toUpperCase() : 'U'}
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold text-white group-hover:text-teal-300 transition-colors">{u.name}</p>
-                      <p className="text-[10px] text-slate-400">{u.email}</p>
-                    </div>
-                  </div>
-                  <ArrowRight className="w-4 h-4 text-slate-500 group-hover:text-teal-400 transition-colors" />
-                </button>
-              ))}
-            </div>
-            <div className="relative my-4 text-center">
-              <span className="bg-[#18181B] px-3 text-[10px] text-slate-500 font-mono uppercase relative z-10">Or sign in manually</span>
-              <div className="absolute inset-0 top-1/2 border-t border-[#27272A]" />
-            </div>
-          </div>
-        )}
-
         {/* Auth Mode Tabs */}
         <div className="flex bg-[#09090B] p-1 rounded-xl border border-[#27272A]">
           <button
             type="button"
-            onClick={() => { setMode('signin'); setError(null); setSuccessMsg(null); }}
+            onClick={() => {
+              setMode('signin');
+              setError(null);
+              setSuccessMsg(null);
+            }}
             className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
               mode === 'signin' ? 'bg-teal-500/20 text-teal-300 border border-teal-500/30' : 'text-slate-400 hover:text-white'
             }`}
@@ -95,7 +91,11 @@ export const AuthView: React.FC = () => {
           </button>
           <button
             type="button"
-            onClick={() => { setMode('signup'); setError(null); setSuccessMsg(null); }}
+            onClick={() => {
+              setMode('signup');
+              setError(null);
+              setSuccessMsg(null);
+            }}
             className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
               mode === 'signup' ? 'bg-teal-500/20 text-teal-300 border border-teal-500/30' : 'text-slate-400 hover:text-white'
             }`}
@@ -122,8 +122,9 @@ export const AuthView: React.FC = () => {
         {/* Google Sign-In Option */}
         <button
           type="button"
-          onClick={googleSignIn}
-          className="w-full py-2.5 bg-zinc-800 hover:bg-zinc-700/80 border border-[#27272A] rounded-xl text-xs font-semibold text-white flex items-center justify-center gap-2.5 transition-all cursor-pointer"
+          onClick={handleGoogleSignIn}
+          disabled={isSubmitting}
+          className="w-full py-2.5 bg-zinc-800 hover:bg-zinc-700/80 border border-[#27272A] rounded-xl text-xs font-semibold text-white flex items-center justify-center gap-2.5 transition-all cursor-pointer disabled:opacity-50"
         >
           <svg className="w-4 h-4" viewBox="0 0 24 24">
             <path
@@ -217,21 +218,28 @@ export const AuthView: React.FC = () => {
 
           <button
             type="submit"
-            className="w-full py-3 bg-teal-500 hover:bg-teal-400 text-black text-xs font-bold rounded-xl shadow-[0_0_20px_rgba(45,212,191,0.2)] transition-all cursor-pointer flex items-center justify-center gap-2"
+            disabled={isSubmitting}
+            className="w-full py-3 bg-teal-500 hover:bg-teal-400 text-black text-xs font-bold rounded-xl shadow-[0_0_20px_rgba(45,212,191,0.2)] transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
           >
-            {mode === 'signup' && <UserPlus className="w-4 h-4" />}
-            {mode === 'signin' && <ShieldCheck className="w-4 h-4" />}
-            {mode === 'forgot' && <KeyRound className="w-4 h-4" />}
-            <span>
-              {mode === 'signup' && 'Create Academicos Account'}
-              {mode === 'signin' && 'Sign In to Workspace'}
-              {mode === 'forgot' && 'Send Reset Link'}
-            </span>
+            {isSubmitting ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <>
+                {mode === 'signup' && <UserPlus className="w-4 h-4" />}
+                {mode === 'signin' && <ShieldCheck className="w-4 h-4" />}
+                {mode === 'forgot' && <KeyRound className="w-4 h-4" />}
+                <span>
+                  {mode === 'signup' && 'Create Academicos Account'}
+                  {mode === 'signin' && 'Sign In to Workspace'}
+                  {mode === 'forgot' && 'Send Reset Link'}
+                </span>
+              </>
+            )}
           </button>
         </form>
 
         <div className="text-center text-[11px] text-slate-500 border-t border-[#27272A] pt-4">
-          Academicos &bull; Isolated Multi-User Academic Workspace
+          Academicos &bull; Firebase Authenticated Academic Workspace
         </div>
       </div>
     </div>

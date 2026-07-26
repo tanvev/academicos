@@ -4,6 +4,7 @@ import { Sidebar } from './components/Sidebar';
 import { Topbar } from './components/Topbar';
 import { MobileNav } from './components/MobileNav';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { Loader2, Zap } from 'lucide-react';
 
 // Modals
 import { QuickAddModal } from './components/QuickAddModal';
@@ -11,6 +12,7 @@ import { SearchModal } from './components/SearchModal';
 import { StudyTimerModal } from './components/StudyTimerModal';
 import { DailyCheckInModal } from './components/DailyCheckInModal';
 import { OnboardingTourModal } from './components/OnboardingTourModal';
+import { MigrationModal } from './components/MigrationModal';
 
 // Views
 import { AuthView } from './views/AuthView';
@@ -40,6 +42,7 @@ const MainContent: React.FC = () => {
     currentView,
     setIsSearchOpen,
     isAuthenticated,
+    authLoading,
     currentUser,
     dailyCheckIns,
     setIsDailyCheckInOpen,
@@ -58,7 +61,7 @@ const MainContent: React.FC = () => {
         setIsDailyCheckInOpen(true);
       }
     }
-  }, [isAuthenticated, currentUser?.onboardingCompleted, dailyCheckIns]);
+  }, [isAuthenticated, currentUser?.onboardingCompleted, dailyCheckIns, setIsDailyCheckInOpen]);
 
   // Global Keyboard Shortcuts (Cmd+K / Ctrl+K for search)
   useEffect(() => {
@@ -71,6 +74,20 @@ const MainContent: React.FC = () => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [setIsSearchOpen]);
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-[#09090B] text-slate-100 flex flex-col items-center justify-center space-y-4">
+        <div className="w-12 h-12 rounded-xl bg-teal-500 text-black flex items-center justify-center font-bold shadow-[0_0_20px_rgba(45,212,191,0.3)] animate-pulse">
+          <Zap className="w-6 h-6 stroke-[2.5]" />
+        </div>
+        <div className="flex items-center gap-2 text-xs font-mono text-slate-400 uppercase tracking-wider">
+          <Loader2 className="w-4 h-4 animate-spin text-teal-400" />
+          <span>Loading Academicos...</span>
+        </div>
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     return <AuthView />;
@@ -149,6 +166,7 @@ const MainContent: React.FC = () => {
       <SearchModal />
       <StudyTimerModal />
       <DailyCheckInModal />
+      <MigrationModal />
       <OnboardingTourModal isOpen={isTourOpen} onClose={() => setIsTourOpen(false)} />
     </div>
   );
@@ -165,4 +183,3 @@ export function App() {
 }
 
 export default App;
-

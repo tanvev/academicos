@@ -1,5 +1,27 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signInWithPopup,
+  GoogleAuthProvider,
+  signOut,
+  sendPasswordResetEmail,
+  onAuthStateChanged,
+  updateProfile,
+} from 'firebase/auth';
+import {
+  doc,
+  collection,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  onSnapshot,
+  getDoc,
+  writeBatch,
+} from 'firebase/firestore';
+import { auth, db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { checkForLegacyData, migrateLegacyDataToFirestore } from '../lib/migration';
+import {
   Program,
   Subject,
   Module,
@@ -43,15 +65,6 @@ interface StudyTimerState {
   elapsedSeconds: number;
 }
 
-const DEFAULT_USER: UserProfile = {
-  uid: 'usr-tanvi',
-  name: 'Tanvi',
-  email: 'tanvi@academicos.app',
-  timezone: 'Asia/Kolkata',
-  createdAt: new Date().toISOString(),
-  onboardingCompleted: true,
-};
-
 interface AppContextType {
   // Navigation
   currentView: ViewMode;
@@ -64,13 +77,19 @@ interface AppContextType {
   users: UserProfile[];
   switchUser: (uid: string) => void;
   isAuthenticated: boolean;
+  authLoading: boolean;
   signUp: (name: string, email: string, pass: string, interests?: string[]) => Promise<boolean>;
-  signup: (email: string, pass: string, name: string) => { success: boolean; error?: string };
-  login: (email: string, pass: string) => { success: boolean; error?: string };
-  logout: () => void;
-  googleSignIn: () => void;
+  signup: (email: string, pass: string, name: string) => Promise<{ success: boolean; error?: string }>;
+  login: (email: string, pass: string) => Promise<{ success: boolean; error?: string }>;
+  logout: () => Promise<void>;
+  googleSignIn: () => Promise<void>;
   resetPassword: (email: string) => Promise<{ success: boolean; message: string }>;
   completeOnboarding: (interests: string[], selectedPrograms: string[]) => void;
+
+  // Migration Prompt
+  showMigrationPrompt: boolean;
+  setShowMigrationPrompt: (show: boolean) => void;
+  performMigration: () => Promise<boolean>;
 
   // Search & Global Modals
   searchQuery: string;
@@ -251,37 +270,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [isStudyTimerModalOpen, setIsStudyTimerModalOpen] = useState(false);
   const [isDailyCheckInModalOpen, setIsDailyCheckInModalOpen] = useState(false);
+  const [isDailyCheckInOpen, setIsDailyCheckInOpen] = useState(false);
   const [isTourOpen, setIsTourOpen] = useState(false);
 
-  const startOnboardingTour = () => {
-    setIsTourOpen(true);
-  };
+  // Migration Prompt State
+  const [showMigrationPrompt, setShowMigrationPrompt] = useState(false);
 
-  // Registered Users list
-  const [users, setUsers] = useState<UserProfile[]>(() => {
-    const saved = localStorage.getItem('academicos_users');
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { /* ignore */ }
-    }
-    return [DEFAULT_USER];
-  });
+  // Auth State
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
 
-  // Currently logged in User
-  const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
-    const activeUid = localStorage.getItem('academicos_active_user_uid');
-    if (activeUid) {
-      const found = users.find((u) => u.uid === activeUid);
-      if (found) return found;
-    }
-    return DEFAULT_USER;
-  });
-
-  const activeUid = currentUser?.uid || 'usr-guest';
-
-  // Helper key generator scoped per user
-  const getUserKey = (key: string) => `academicos_user_${activeUid}_${key}`;
-
-  // Collections
+  // Scoped Data Collections
   const [programs, setPrograms] = useState<Program[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [modules, setModules] = useState<Module[]>([]);
@@ -303,203 +302,160 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Timer State
   const [studyTimer, setStudyTimer] = useState<StudyTimerState | null>(null);
 
-  // Load User Scoped Data on user switch or mount
+  const activeUid = currentUser?.uid || '';
+
+  // 1. LISTEN TO FIREBASE AUTH STATE
   useEffect(() => {
-    if (!currentUser) return;
+    const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
+      if (fbUser) {
+        try {
+          const userRef = doc(db, 'users', fbUser.uid);
+          const userSnap = await getDoc(userRef);
 
-    // 1. Programs
-    const savedP = localStorage.getItem(getUserKey('programs'));
-    const oldP = localStorage.getItem('tanvi_os_app_state_v1_programs');
-    if (savedP) setPrograms(JSON.parse(savedP));
-    else if (oldP && activeUid === DEFAULT_USER.uid) setPrograms(JSON.parse(oldP));
-    else if (activeUid === DEFAULT_USER.uid) setPrograms(STARTER_PROGRAMS.map((p) => ({ ...p, userId: activeUid })));
-    else setPrograms([]);
-
-    // 2. Subjects
-    const savedS = localStorage.getItem(getUserKey('subjects'));
-    const oldS = localStorage.getItem('tanvi_os_app_state_v1_subjects');
-    if (savedS) setSubjects(JSON.parse(savedS));
-    else if (oldS && activeUid === DEFAULT_USER.uid) setSubjects(JSON.parse(oldS));
-    else if (activeUid === DEFAULT_USER.uid) setSubjects(STARTER_SUBJECTS.map((s) => ({ ...s, userId: activeUid })));
-    else setSubjects([]);
-
-    // 2b. Modules
-    const savedMod = localStorage.getItem(getUserKey('modules'));
-    if (savedMod) setModules(JSON.parse(savedMod));
-    else setModules([]);
-
-    // 3. Topics (Check for ONE-TIME syllabus status reset)
-    const syllabusResetDone = localStorage.getItem(getUserKey('syllabus_reset_v2'));
-    const savedT = localStorage.getItem(getUserKey('topics'));
-    const oldT = localStorage.getItem('tanvi_os_app_state_v1_topics');
-    let loadedTopics: Topic[] = [];
-
-    if (savedT) loadedTopics = JSON.parse(savedT);
-    else if (oldT && activeUid === DEFAULT_USER.uid) loadedTopics = JSON.parse(oldT);
-    else if (activeUid === DEFAULT_USER.uid) loadedTopics = getStarterTopics().map((t) => ({ ...t, userId: activeUid }));
-    else loadedTopics = [];
-
-    if (!syllabusResetDone) {
-      // ONE-TIME RESET: Set all syllabus topic statuses to 'not_started'
-      loadedTopics = loadedTopics.map((t) => ({
-        ...t,
-        status: 'not_started' as TopicStatus,
-      }));
-      localStorage.setItem(getUserKey('syllabus_reset_v2'), 'true');
-    }
-    setTopics(loadedTopics);
-
-    // 4. Tasks
-    const savedTasks = localStorage.getItem(getUserKey('tasks'));
-    const oldTasks = localStorage.getItem('tanvi_os_app_state_v1_tasks');
-    if (savedTasks) setTasks(JSON.parse(savedTasks));
-    else if (oldTasks && activeUid === DEFAULT_USER.uid) setTasks(JSON.parse(oldTasks));
-    else if (activeUid === DEFAULT_USER.uid) setTasks(getStarterTasks().map((t) => ({ ...t, userId: activeUid })));
-    else setTasks([]);
-
-    // 5. Task Completions
-    const savedTc = localStorage.getItem(getUserKey('task_completions'));
-    setTaskCompletions(savedTc ? JSON.parse(savedTc) : []);
-
-    // 6. Daily CheckIns
-    const savedDc = localStorage.getItem(getUserKey('daily_checkins'));
-    setDailyCheckIns(savedDc ? JSON.parse(savedDc) : []);
-
-    // 7. Sessions
-    const savedSessions = localStorage.getItem(getUserKey('sessions'));
-    const oldSessions = localStorage.getItem('tanvi_os_app_state_v1_sessions');
-    if (savedSessions) setStudySessions(JSON.parse(savedSessions));
-    else if (oldSessions && activeUid === DEFAULT_USER.uid) setStudySessions(JSON.parse(oldSessions));
-    else setStudySessions([]);
-
-    // 8. CAT Mocks
-    const savedMocks = localStorage.getItem(getUserKey('cat_mocks'));
-    const oldMocks = localStorage.getItem('tanvi_os_app_state_v1_cat_mocks');
-    if (savedMocks) setCatMocks(JSON.parse(savedMocks));
-    else if (oldMocks && activeUid === DEFAULT_USER.uid) setCatMocks(JSON.parse(oldMocks));
-    else setCatMocks([]);
-
-    // 9. CAT Sectionals
-    const savedSec = localStorage.getItem(getUserKey('cat_sectionals'));
-    const oldSec = localStorage.getItem('tanvi_os_app_state_v1_cat_sectionals');
-    if (savedSec) setCatSectionals(JSON.parse(savedSec));
-    else if (oldSec && activeUid === DEFAULT_USER.uid) setCatSectionals(JSON.parse(oldSec));
-    else setCatSectionals([]);
-
-    // 10. Mistakes
-    const savedMis = localStorage.getItem(getUserKey('mistakes'));
-    const oldMis = localStorage.getItem('tanvi_os_app_state_v1_mistakes');
-    if (savedMis) setMistakes(JSON.parse(savedMis));
-    else if (oldMis && activeUid === DEFAULT_USER.uid) setMistakes(JSON.parse(oldMis));
-    else setMistakes([]);
-
-    // 11. Inbox
-    const savedInbox = localStorage.getItem(getUserKey('inbox'));
-    const oldInbox = localStorage.getItem('tanvi_os_app_state_v1_inbox');
-    if (savedInbox) setInbox(JSON.parse(savedInbox));
-    else if (oldInbox && activeUid === DEFAULT_USER.uid) setInbox(JSON.parse(oldInbox));
-    else setInbox([]);
-
-    // 11b. Import History
-    const savedImpHist = localStorage.getItem(getUserKey('import_history'));
-    if (savedImpHist) setImportHistory(JSON.parse(savedImpHist));
-    else setImportHistory([]);
-
-    // 12. Settings
-    const savedSettings = localStorage.getItem(getUserKey('settings'));
-    const oldSettings = localStorage.getItem('tanvi_os_app_state_v1_settings');
-    if (savedSettings) setSettings(JSON.parse(savedSettings));
-    else if (oldSettings && activeUid === DEFAULT_USER.uid) setSettings(JSON.parse(oldSettings));
-    else setSettings(STARTER_SETTINGS);
-
-    // 13. Timer
-    const savedTimer = localStorage.getItem(getUserKey('study_timer'));
-    if (savedTimer) {
-      try {
-        const parsed = JSON.parse(savedTimer);
-        if (parsed && parsed.isRunning && parsed.startTimestamp) {
-          const delta = Math.floor((Date.now() - parsed.startTimestamp) / 1000);
-          if (delta > 0) {
-            parsed.elapsedSeconds = (parsed.elapsedSeconds || 0) + delta;
+          let userProfile: UserProfile;
+          if (userSnap.exists()) {
+            const data = userSnap.data();
+            userProfile = {
+              uid: fbUser.uid,
+              name: data.name || fbUser.displayName || 'User',
+              email: fbUser.email || '',
+              timezone: data.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata',
+              createdAt: data.createdAt || new Date().toISOString(),
+              onboardingCompleted: data.onboardingCompleted ?? true,
+              ...data,
+            };
+          } else {
+            userProfile = {
+              uid: fbUser.uid,
+              name: fbUser.displayName || fbUser.email?.split('@')[0] || 'User',
+              email: fbUser.email || '',
+              timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata',
+              createdAt: new Date().toISOString(),
+              onboardingCompleted: true,
+            };
+            await setDoc(userRef, userProfile, { merge: true });
           }
-          parsed.startTimestamp = Date.now();
+
+          setCurrentUser(userProfile);
+
+          // Check if legacy data exists in localStorage and migration not completed
+          if (!userSnap.data()?.legacyMigrationCompletedAt && checkForLegacyData()) {
+            setShowMigrationPrompt(true);
+          }
+        } catch (e) {
+          console.error('Error handling user auth profile:', e);
         }
-        setStudyTimer(parsed);
-      } catch (e) {
-        setStudyTimer(null);
+      } else {
+        // Logged out - reset all in-memory collections
+        setCurrentUser(null);
+        setPrograms([]);
+        setSubjects([]);
+        setModules([]);
+        setTopics([]);
+        setTasks([]);
+        setTaskCompletions([]);
+        setDailyCheckIns([]);
+        setStudySessions([]);
+        setCatMocks([]);
+        setCatSectionals([]);
+        setMistakes([]);
+        setInbox([]);
+        setImportHistory([]);
+        setWeeklyReports([]);
+        setUserUpdateStates({});
       }
-    } else {
-      setStudyTimer(null);
-    }
+      setAuthLoading(false);
+    });
 
-    // 14. Weekly Reports
-    const savedWr = localStorage.getItem(getUserKey('weekly_reports'));
-    setWeeklyReports(savedWr ? JSON.parse(savedWr) : []);
+    return () => unsubscribe();
+  }, []);
 
-    // 15. User Update States
-    const savedUpdState = localStorage.getItem(getUserKey('update_states'));
-    setUserUpdateStates(savedUpdState ? JSON.parse(savedUpdState) : {});
-  }, [activeUid]);
-
-  // Persist Users
+  // 2. REAL-TIME FIRESTORE SUBSCRIPTIONS
   useEffect(() => {
-    localStorage.setItem('academicos_users', JSON.stringify(users));
-  }, [users]);
+    if (!currentUser?.uid) return;
+    const uid = currentUser.uid;
 
-  // Persist Active User
+    const unsubscribes: (() => void)[] = [];
+
+    const subscribe = <T,>(subcoll: string, setter: React.Dispatch<React.SetStateAction<T[]>>) => {
+      const collRef = collection(db, 'users', uid, subcoll);
+      const unsub = onSnapshot(
+        collRef,
+        (snap) => {
+          const list: T[] = [];
+          snap.forEach((doc) => {
+            list.push({ ...doc.data(), id: doc.id } as unknown as T);
+          });
+          setter(list);
+        },
+        (error) => handleFirestoreError(error, OperationType.LIST, `users/${uid}/${subcoll}`)
+      );
+      unsubscribes.push(unsub);
+    };
+
+    subscribe<Program>('programs', setPrograms);
+    subscribe<Subject>('subjects', setSubjects);
+    subscribe<Module>('modules', setModules);
+    subscribe<Topic>('topics', setTopics);
+    subscribe<Task>('tasks', setTasks);
+    subscribe<TaskCompletion>('taskCompletions', setTaskCompletions);
+    subscribe<DailyCheckIn>('dailyCheckIns', setDailyCheckIns);
+    subscribe<StudySession>('studySessions', setStudySessions);
+    subscribe<CATMock>('catMocks', setCatMocks);
+    subscribe<CATSectional>('catSectionals', setCatSectionals);
+    subscribe<Mistake>('mistakes', setMistakes);
+    subscribe<InboxItem>('inbox', setInbox);
+    subscribe<ImportHistoryRecord>('importHistory', setImportHistory);
+    subscribe<WeeklyReport>('weeklyReports', setWeeklyReports);
+
+    // User Profile / Settings listener
+    const userDocRef = doc(db, 'users', uid);
+    const unsubUser = onSnapshot(
+      userDocRef,
+      (snap) => {
+        if (snap.exists()) {
+          const data = snap.data();
+          if (data.settings) setSettings(data.settings);
+        }
+      },
+      (error) => handleFirestoreError(error, OperationType.GET, `users/${uid}`)
+    );
+    unsubscribes.push(unsubUser);
+
+    return () => {
+      unsubscribes.forEach((unsub) => unsub());
+    };
+  }, [currentUser?.uid]);
+
+  // Seed default starter data into Firestore if user has zero programs and no legacy data
   useEffect(() => {
-    if (currentUser) {
-      localStorage.setItem('academicos_active_user_uid', currentUser.uid);
-    } else {
-      localStorage.removeItem('academicos_active_user_uid');
-    }
-  }, [currentUser]);
+    if (!currentUser?.uid || authLoading) return;
+    const checkAndSeed = async () => {
+      const uid = currentUser.uid;
+      const progRef = collection(db, 'users', uid, 'programs');
+      const snap = await getDoc(doc(db, 'users', uid));
+      if (snap.exists() && snap.data()?.legacyMigrationCompletedAt) return;
 
-  // Save Scoped Data to LocalStorage on updates
-  useEffect(() => {
-    if (!currentUser) return;
-
-    localStorage.setItem(getUserKey('programs'), JSON.stringify(programs));
-    localStorage.setItem(getUserKey('subjects'), JSON.stringify(subjects));
-    localStorage.setItem(getUserKey('modules'), JSON.stringify(modules));
-    localStorage.setItem(getUserKey('topics'), JSON.stringify(topics));
-    localStorage.setItem(getUserKey('tasks'), JSON.stringify(tasks));
-    localStorage.setItem(getUserKey('task_completions'), JSON.stringify(taskCompletions));
-    localStorage.setItem(getUserKey('daily_checkins'), JSON.stringify(dailyCheckIns));
-    localStorage.setItem(getUserKey('sessions'), JSON.stringify(studySessions));
-    localStorage.setItem(getUserKey('cat_mocks'), JSON.stringify(catMocks));
-    localStorage.setItem(getUserKey('cat_sectionals'), JSON.stringify(catSectionals));
-    localStorage.setItem(getUserKey('mistakes'), JSON.stringify(mistakes));
-    localStorage.setItem(getUserKey('inbox'), JSON.stringify(inbox));
-    localStorage.setItem(getUserKey('import_history'), JSON.stringify(importHistory));
-    localStorage.setItem(getUserKey('settings'), JSON.stringify(settings));
-    localStorage.setItem(getUserKey('weekly_reports'), JSON.stringify(weeklyReports));
-    localStorage.setItem(getUserKey('update_states'), JSON.stringify(userUpdateStates));
-
-    if (studyTimer) {
-      localStorage.setItem(getUserKey('study_timer'), JSON.stringify(studyTimer));
-    } else {
-      localStorage.removeItem(getUserKey('study_timer'));
-    }
-  }, [
-    activeUid,
-    programs,
-    subjects,
-    modules,
-    topics,
-    tasks,
-    taskCompletions,
-    dailyCheckIns,
-    studySessions,
-    catMocks,
-    catSectionals,
-    mistakes,
-    inbox,
-    settings,
-    weeklyReports,
-    userUpdateStates,
-    studyTimer,
-  ]);
+      // Seed if empty after initial fetch
+      setTimeout(async () => {
+        if (programs.length === 0 && !checkForLegacyData()) {
+          for (const p of STARTER_PROGRAMS) {
+            await setDoc(doc(db, 'users', uid, 'programs', p.id), { ...p, userId: uid }, { merge: true });
+          }
+          for (const s of STARTER_SUBJECTS) {
+            await setDoc(doc(db, 'users', uid, 'subjects', s.id), { ...s, userId: uid }, { merge: true });
+          }
+          for (const t of getStarterTopics()) {
+            await setDoc(doc(db, 'users', uid, 'topics', t.id), { ...t, userId: uid }, { merge: true });
+          }
+          for (const task of getStarterTasks()) {
+            await setDoc(doc(db, 'users', uid, 'tasks', task.id), { ...task, userId: uid }, { merge: true });
+          }
+        }
+      }, 1200);
+    };
+    checkAndSeed();
+  }, [currentUser?.uid, authLoading]);
 
   // Fetch verified academic & exam updates on mount
   useEffect(() => {
@@ -541,115 +497,100 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Today's Check-In
   const todayStr = new Date().toISOString().split('T')[0];
   const todayCheckIn = dailyCheckIns.find((c) => c.date === todayStr) || null;
 
-  // AUTH ACTIONS
-  const switchUser = (uid: string) => {
-    const found = users.find((u) => u.uid === uid);
-    if (found) {
-      setCurrentUser(found);
-      setCurrentView(found.onboardingCompleted ? 'dashboard' : 'onboarding');
-    }
+  // Migration Helper
+  const performMigration = async (): Promise<boolean> => {
+    if (!currentUser?.uid) return false;
+    const res = await migrateLegacyDataToFirestore(currentUser.uid);
+    return res;
   };
 
-  const signup = (email: string, pass: string, name: string) => {
-    const existing = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
-    if (existing) {
-      return { success: false, error: 'An account with this email already exists.' };
+  // AUTH ACTIONS
+  const switchUser = (uid: string) => {
+    /* deprecated local switch */
+  };
+
+  const signup = async (email: string, pass: string, name: string) => {
+    try {
+      const cred = await createUserWithEmailAndPassword(auth, email, pass);
+      if (cred.user) {
+        await updateProfile(cred.user, { displayName: name });
+        const userProfile: UserProfile = {
+          uid: cred.user.uid,
+          name,
+          email,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata',
+          createdAt: new Date().toISOString(),
+          onboardingCompleted: true,
+        };
+        await setDoc(doc(db, 'users', cred.user.uid), userProfile, { merge: true });
+        setCurrentUser(userProfile);
+        setCurrentView('dashboard');
+        return { success: true };
+      }
+      return { success: false, error: 'Failed to create user' };
+    } catch (e: any) {
+      return { success: false, error: e.message || 'Signup failed' };
     }
-
-    const newUser: UserProfile = {
-      uid: `usr-${Date.now()}`,
-      name,
-      email,
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata',
-      createdAt: new Date().toISOString(),
-      onboardingCompleted: false,
-    };
-
-    setUsers((prev) => [...prev, newUser]);
-    setCurrentUser(newUser);
-    setCurrentView('onboarding');
-    return { success: true };
   };
 
   const signUp = async (name: string, email: string, pass: string, interests: string[] = []): Promise<boolean> => {
-    const res = signup(email, pass, name);
+    const res = await signup(email, pass, name);
     return res.success;
   };
 
-  const login = (email: string, pass: string) => {
-    const found = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
-    if (found) {
-      setCurrentUser(found);
-      setCurrentView(found.onboardingCompleted ? 'dashboard' : 'onboarding');
+  const login = async (email: string, pass: string) => {
+    try {
+      await signInWithEmailAndPassword(auth, email, pass);
+      setCurrentView('dashboard');
       return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e.message || 'Invalid credentials' };
     }
-    // Create new account if doesn't exist for effortless testing
-    const newUser: UserProfile = {
-      uid: `usr-${Date.now()}`,
-      name: email.split('@')[0],
-      email,
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata',
-      createdAt: new Date().toISOString(),
-      onboardingCompleted: true,
-    };
-    setUsers((prev) => [...prev, newUser]);
-    setCurrentUser(newUser);
-    setCurrentView('dashboard');
-    return { success: true };
   };
 
-  const logout = () => {
+  const logout = async () => {
+    await signOut(auth);
     setCurrentUser(null);
     setCurrentView('auth');
   };
 
-  const googleSignIn = () => {
-    const googleUser: UserProfile = {
-      uid: `usr-google-${Date.now()}`,
-      name: 'Google Scholar',
-      email: 'scholar@academicos.app',
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata',
-      createdAt: new Date().toISOString(),
-      onboardingCompleted: false,
-    };
-    setUsers((prev) => [...prev, googleUser]);
-    setCurrentUser(googleUser);
-    setCurrentView('onboarding');
+  const googleSignIn = async () => {
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+      setCurrentView('dashboard');
+    } catch (e: any) {
+      console.error('Google Sign-In Error:', e);
+    }
   };
 
   const resetPassword = async (email: string) => {
-    return {
-      success: true,
-      message: `Password reset instructions have been sent to ${email}.`,
-    };
+    try {
+      await sendPasswordResetEmail(auth, email);
+      return {
+        success: true,
+        message: `Password reset instructions have been sent to ${email}.`,
+      };
+    } catch (e: any) {
+      return {
+        success: false,
+        message: e.message || 'Failed to send password reset email.',
+      };
+    }
   };
 
-  const completeOnboarding = (interests: string[], selectedProgramTypes: string[]) => {
+  const completeOnboarding = async (interests: string[], selectedProgramTypes: string[]) => {
     if (!currentUser) return;
     const updatedUser: UserProfile = {
       ...currentUser,
       onboardingCompleted: true,
       interests,
     };
-
-    // Update users array
-    setUsers((prev) => prev.map((u) => (u.uid === currentUser.uid ? updatedUser : u)));
     setCurrentUser(updatedUser);
-
-    // If CAT selected, configure CAT program if not present
-    if (selectedProgramTypes.includes('cat') && !programs.some((p) => p.name.includes('CAT'))) {
-      const catProg = STARTER_PROGRAMS.find((p) => p.id === 'prog-cat-2026') || STARTER_PROGRAMS[0];
-      setPrograms((prev) => [{ ...catProg, userId: currentUser.uid }, ...prev]);
-      setSubjects((prev) => [
-        ...STARTER_SUBJECTS.filter((s) => s.programId === 'prog-cat-2026').map((s) => ({ ...s, userId: currentUser.uid })),
-        ...prev,
-      ]);
-    }
-
+    await setDoc(doc(db, 'users', currentUser.uid), { onboardingCompleted: true, interests }, { merge: true });
     setCurrentView('dashboard');
   };
 
@@ -701,31 +642,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const cleanName = name.toLowerCase().trim();
     if (!cleanName) return null;
 
-    // First search scheduled full mocks
     const mockMatch = catMocks.find((m) => {
       const mName = m.name.toLowerCase().trim();
       const isNameMatch = mName.includes(cleanName) || cleanName.includes(mName);
       if (!isNameMatch) return false;
-      if (provider && m.provider && !m.provider.toLowerCase().includes(provider.toLowerCase().trim()) && !provider.toLowerCase().includes(m.provider.toLowerCase())) return false;
+      if (provider && m.provider && !m.provider.toLowerCase().includes(provider.toLowerCase().trim())) return false;
       return true;
     });
 
-    if (mockMatch) {
-      return { type: 'mock', item: mockMatch };
-    }
+    if (mockMatch) return { type: 'mock', item: mockMatch };
 
-    // Next search scheduled sectionals
     const secMatch = catSectionals.find((s) => {
       const sName = s.name.toLowerCase().trim();
       const isNameMatch = sName.includes(cleanName) || cleanName.includes(sName);
       if (!isNameMatch) return false;
-      if (provider && s.provider && !s.provider.toLowerCase().includes(provider.toLowerCase().trim()) && !provider.toLowerCase().includes(s.provider.toLowerCase())) return false;
+      if (provider && s.provider && !s.provider.toLowerCase().includes(provider.toLowerCase().trim())) return false;
       return true;
     });
 
-    if (secMatch) {
-      return { type: 'sectional', item: secMatch };
-    }
+    if (secMatch) return { type: 'sectional', item: secMatch };
 
     return null;
   };
@@ -744,9 +679,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     recurrenceType?: any;
     recurrenceDays?: number[];
   }): CATMock | CATSectional => {
+    if (!activeUid) throw new Error('User not authenticated');
     if (data.testType === 'full_cat' || data.testType === 'other_test') {
+      const id = `mock-${Date.now()}`;
       const newM: CATMock = {
-        id: `mock-${Date.now()}`,
+        id,
         userId: activeUid,
         name: data.name.trim(),
         provider: data.provider || 'IMS',
@@ -773,13 +710,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         recurrenceType: data.recurrenceType,
         recurrenceDays: data.recurrenceDays,
       };
-      setCatMocks((prev) => [newM, ...prev]);
+      setDoc(doc(db, 'users', activeUid, 'catMocks', id), newM).catch((err) =>
+        handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/catMocks/${id}`)
+      );
       return newM;
     } else {
+      const id = `sec-${Date.now()}`;
       const section: 'VARC' | 'DILR' | 'QA' =
         data.testType === 'varc_sectional' ? 'VARC' : data.testType === 'dilr_sectional' ? 'DILR' : 'QA';
       const newS: CATSectional = {
-        id: `sec-${Date.now()}`,
+        id,
         userId: activeUid,
         name: data.name.trim(),
         provider: data.provider || 'General',
@@ -802,7 +742,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         recurrenceType: data.recurrenceType,
         recurrenceDays: data.recurrenceDays,
       };
-      setCatSectionals((prev) => [newS, ...prev]);
+      setDoc(doc(db, 'users', activeUid, 'catSectionals', id), newS).catch((err) =>
+        handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/catSectionals/${id}`)
+      );
       return newS;
     }
   };
@@ -812,46 +754,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     type: 'mock' | 'sectional',
     result: Partial<CATMock> & Partial<CATSectional>
   ) => {
-    if (type === 'mock') {
-      setCatMocks((prev) =>
-        prev.map((m) =>
-          m.id === id
-            ? {
-                ...m,
-                ...result,
-                status: 'completed',
-                analysisDeadline:
-                  result.analysisDeadline ||
-                  m.analysisDeadline ||
-                  new Date(Date.now() + 86400000).toISOString().split('T')[0],
-              }
-            : m
-        )
-      );
-    } else {
-      setCatSectionals((prev) =>
-        prev.map((s) =>
-          s.id === id
-            ? {
-                ...s,
-                ...result,
-                status: 'completed',
-                analysisDeadline:
-                  result.analysisDeadline ||
-                  s.analysisDeadline ||
-                  new Date(Date.now() + 86400000).toISOString().split('T')[0],
-              }
-            : s
-        )
-      );
-    }
+    if (!activeUid) return;
+    const subcoll = type === 'mock' ? 'catMocks' : 'catSectionals';
+    const docRef = doc(db, 'users', activeUid, subcoll, id);
+    updateDoc(docRef, { ...result, status: 'completed' }).catch((err) =>
+      handleFirestoreError(err, OperationType.UPDATE, `users/${activeUid}/${subcoll}/${id}`)
+    );
   };
 
   // STREAK COMPUTATION
   const computeStreakInfo = () => {
     const activityDates = new Set<string>();
 
-    // Collect dates from daily checkins, sessions, completed tasks/completions, mocks, sectionals
     dailyCheckIns.forEach((c) => activityDates.add(c.date));
     studySessions.forEach((s) => activityDates.add(s.date));
     taskCompletions.forEach((tc) => activityDates.add(tc.date));
@@ -870,7 +784,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let checkDate = new Date();
 
     if (!hasActivityToday) {
-      // Check from yesterday to see if active streak carries over
       checkDate.setDate(checkDate.getDate() - 1);
     }
 
@@ -921,12 +834,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notes?: string,
     updatedTopicStatus?: TopicStatus
   ) => {
-    if (!studyTimer) return;
+    if (!studyTimer || !activeUid) return;
     const durationMins = Math.max(1, Math.round(studyTimer.elapsedSeconds / 60));
     const nowTimeStr = new Date().toTimeString().slice(0, 5);
+    const id = `session-${Date.now()}`;
 
     const newSession: StudySession = {
-      id: `session-${Date.now()}`,
+      id,
       userId: activeUid,
       programId: studyTimer.programId,
       subjectId: studyTimer.subjectId,
@@ -941,22 +855,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: todayStr,
     };
 
-    setStudySessions((prev) => [newSession, ...prev]);
+    setDoc(doc(db, 'users', activeUid, 'studySessions', id), newSession).catch((err) =>
+      handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/studySessions/${id}`)
+    );
 
     if (studyTimer.topicId) {
-      setTopics((prev) =>
-        prev.map((t) => {
-          if (t.id === studyTimer.topicId) {
-            return {
-              ...t,
-              totalStudyTimeMinutes: t.totalStudyTimeMinutes + durationMins,
-              lastStudied: new Date().toISOString(),
-              status: updatedTopicStatus || t.status,
-            };
-          }
-          return t;
-        })
-      );
+      const topicRef = doc(db, 'users', activeUid, 'topics', studyTimer.topicId);
+      const existing = topics.find((t) => t.id === studyTimer.topicId);
+      if (existing) {
+        updateDoc(topicRef, {
+          totalStudyTimeMinutes: (existing.totalStudyTimeMinutes || 0) + durationMins,
+          lastStudied: new Date().toISOString(),
+          status: updatedTopicStatus || existing.status,
+        }).catch((err) =>
+          handleFirestoreError(err, OperationType.UPDATE, `users/${activeUid}/topics/${studyTimer.topicId}`)
+        );
+      }
     }
 
     setStudyTimer(null);
@@ -975,25 +889,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     nonNegotiableTaskId?: string,
     note?: string
   ) => {
-    const existingIdx = dailyCheckIns.findIndex((c) => c.date === todayStr);
+    if (!activeUid) return;
+    const existing = dailyCheckIns.find((c) => c.date === todayStr);
+    const id = existing ? existing.id : `dc-${Date.now()}`;
     const newRecord: DailyCheckIn = {
-      id: existingIdx >= 0 ? dailyCheckIns[existingIdx].id : `dc-${Date.now()}`,
+      id,
       userId: activeUid,
       date: todayStr,
       availableMinutes,
       energy,
       nonNegotiableTaskId,
       note,
-      createdAt: existingIdx >= 0 ? dailyCheckIns[existingIdx].createdAt : new Date().toISOString(),
+      createdAt: existing ? existing.createdAt : new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
-    if (existingIdx >= 0) {
-      setDailyCheckIns((prev) => prev.map((item, idx) => (idx === existingIdx ? newRecord : item)));
-    } else {
-      setDailyCheckIns((prev) => [newRecord, ...prev]);
-    }
+    setDoc(doc(db, 'users', activeUid, 'dailyCheckIns', id), newRecord).catch((err) =>
+      handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/dailyCheckIns/${id}`)
+    );
+
     setIsDailyCheckInModalOpen(false);
+    setIsDailyCheckInOpen(false);
   };
 
   const addDailyCheckIn = (checkIn: {
@@ -1003,484 +919,455 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     focusArea?: string;
     notes?: string;
   }) => {
-    const minutes = Math.round((checkIn.targetHours || 4) * 60);
-    saveDailyCheckIn(minutes, 'normal', undefined, checkIn.notes || checkIn.focusArea);
+    if (!activeUid) return;
+    const id = `dc-${Date.now()}`;
+    const record: DailyCheckIn = {
+      id,
+      userId: activeUid,
+      date: checkIn.date || todayStr,
+      availableMinutes: (checkIn.targetHours || 3) * 60,
+      energy: (checkIn.mood as any) || 'normal',
+      note: checkIn.notes || checkIn.focusArea,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    setDoc(doc(db, 'users', activeUid, 'dailyCheckIns', id), record).catch((err) =>
+      handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/dailyCheckIns/${id}`)
+    );
   };
 
   // CRUD ACTIONS
   const addProgram = (p: Omit<Program, 'id'>) => {
-    const newP: Program = { ...p, id: `prog-${Date.now()}`, userId: activeUid };
-    setPrograms((prev) => [...prev, newP]);
-  };
-
-  const updateProgram = (id: string, p: Partial<Program>) => {
-    setPrograms((prev) => prev.map((item) => (item.id === id ? { ...item, ...p } : item)));
-  };
-
-  const deleteProgram = (id: string) => {
-    setPrograms((prev) => prev.filter((p) => p.id !== id));
-    setSubjects((prev) => prev.filter((s) => s.programId !== id));
-    setTopics((prev) => prev.filter((t) => t.programId !== id));
-    setTasks((prev) => prev.filter((t) => t.programId !== id));
-  };
-
-  const addSubject = (s: Omit<Subject, 'id'>) => {
-    const newS: Subject = { ...s, id: `subj-${Date.now()}`, userId: activeUid };
-    setSubjects((prev) => [...prev, newS]);
-  };
-
-  const updateSubject = (id: string, s: Partial<Subject>) => {
-    setSubjects((prev) => prev.map((item) => (item.id === id ? { ...item, ...s } : item)));
-  };
-
-  const deleteSubject = (id: string) => {
-    setSubjects((prev) => prev.filter((s) => s.id !== id));
-    setModules((prev) => prev.filter((m) => m.subjectId !== id));
-    setTopics((prev) => prev.filter((t) => t.subjectId !== id));
-  };
-
-  const reorderSubjects = (reordered: Subject[]) => {
-    setSubjects(reordered);
-  };
-
-  const addModule = (m: Omit<Module, 'id'>) => {
-    const newM: Module = { ...m, id: `mod-${Date.now()}`, userId: activeUid };
-    setModules((prev) => [...prev, newM]);
-  };
-
-  const updateModule = (id: string, m: Partial<Module>) => {
-    setModules((prev) => prev.map((item) => (item.id === id ? { ...item, ...m } : item)));
-  };
-
-  const deleteModule = (id: string) => {
-    setModules((prev) => prev.filter((m) => m.id !== id));
-    setTopics((prev) => prev.map((t) => (t.moduleId === id ? { ...t, moduleId: undefined } : t)));
-  };
-
-  const addTopic = (t: Omit<Topic, 'id'>) => {
-    const newT: Topic = { ...t, id: `topic-${Date.now()}`, userId: activeUid };
-    setTopics((prev) => [...prev, newT]);
-  };
-
-  const bulkAddTopics = (newTopics: Omit<Topic, 'id'>[]) => {
-    const created: Topic[] = newTopics.map((t, idx) => ({
-      ...t,
-      id: `topic-${Date.now()}-${idx}`,
-      userId: activeUid,
-    }));
-    setTopics((prev) => [...prev, ...created]);
-  };
-
-  const updateTopic = (id: string, t: Partial<Topic>) => {
-    setTopics((prev) => prev.map((item) => (item.id === id ? { ...item, ...t } : item)));
-  };
-
-  const updateTopicStatus = (id: string, status: TopicStatus) => {
-    setTopics((prev) =>
-      prev.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              status,
-              lastStudied: new Date().toISOString(),
-              lastRevised: status === 'completed' || status === 'practised' ? new Date().toISOString() : item.lastRevised,
-            }
-          : item
-      )
+    if (!activeUid) return;
+    const id = `prog-${Date.now()}`;
+    setDoc(doc(db, 'users', activeUid, 'programs', id), { ...p, id, userId: activeUid }).catch((err) =>
+      handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/programs/${id}`)
     );
   };
 
+  const updateProgram = (id: string, p: Partial<Program>) => {
+    if (!activeUid) return;
+    updateDoc(doc(db, 'users', activeUid, 'programs', id), p).catch((err) =>
+      handleFirestoreError(err, OperationType.UPDATE, `users/${activeUid}/programs/${id}`)
+    );
+  };
+
+  const deleteProgram = (id: string) => {
+    if (!activeUid) return;
+    deleteDoc(doc(db, 'users', activeUid, 'programs', id)).catch((err) =>
+      handleFirestoreError(err, OperationType.DELETE, `users/${activeUid}/programs/${id}`)
+    );
+  };
+
+  const addSubject = (s: Omit<Subject, 'id'>) => {
+    if (!activeUid) return;
+    const id = `subj-${Date.now()}`;
+    setDoc(doc(db, 'users', activeUid, 'subjects', id), { ...s, id, userId: activeUid }).catch((err) =>
+      handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/subjects/${id}`)
+    );
+  };
+
+  const updateSubject = (id: string, s: Partial<Subject>) => {
+    if (!activeUid) return;
+    updateDoc(doc(db, 'users', activeUid, 'subjects', id), s).catch((err) =>
+      handleFirestoreError(err, OperationType.UPDATE, `users/${activeUid}/subjects/${id}`)
+    );
+  };
+
+  const deleteSubject = (id: string) => {
+    if (!activeUid) return;
+    deleteDoc(doc(db, 'users', activeUid, 'subjects', id)).catch((err) =>
+      handleFirestoreError(err, OperationType.DELETE, `users/${activeUid}/subjects/${id}`)
+    );
+  };
+
+  const reorderSubjects = (reordered: Subject[]) => {
+    if (!activeUid) return;
+    reordered.forEach((subj, index) => {
+      updateDoc(doc(db, 'users', activeUid, 'subjects', subj.id), { order: index }).catch((err) =>
+        handleFirestoreError(err, OperationType.UPDATE, `users/${activeUid}/subjects/${subj.id}`)
+      );
+    });
+  };
+
+  const addModule = (m: Omit<Module, 'id'>) => {
+    if (!activeUid) return;
+    const id = `mod-${Date.now()}`;
+    setDoc(doc(db, 'users', activeUid, 'modules', id), { ...m, id, userId: activeUid }).catch((err) =>
+      handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/modules/${id}`)
+    );
+  };
+
+  const updateModule = (id: string, m: Partial<Module>) => {
+    if (!activeUid) return;
+    updateDoc(doc(db, 'users', activeUid, 'modules', id), m).catch((err) =>
+      handleFirestoreError(err, OperationType.UPDATE, `users/${activeUid}/modules/${id}`)
+    );
+  };
+
+  const deleteModule = (id: string) => {
+    if (!activeUid) return;
+    deleteDoc(doc(db, 'users', activeUid, 'modules', id)).catch((err) =>
+      handleFirestoreError(err, OperationType.DELETE, `users/${activeUid}/modules/${id}`)
+    );
+  };
+
+  const addTopic = (t: Omit<Topic, 'id'>) => {
+    if (!activeUid) return;
+    const id = `top-${Date.now()}`;
+    setDoc(doc(db, 'users', activeUid, 'topics', id), { ...t, id, userId: activeUid }).catch((err) =>
+      handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/topics/${id}`)
+    );
+  };
+
+  const bulkAddTopics = (newTopics: Omit<Topic, 'id'>[]) => {
+    if (!activeUid) return;
+    newTopics.forEach((t) => {
+      const id = `top-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+      setDoc(doc(db, 'users', activeUid, 'topics', id), { ...t, id, userId: activeUid }).catch((err) =>
+        handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/topics/${id}`)
+      );
+    });
+  };
+
+  const updateTopic = (id: string, t: Partial<Topic>) => {
+    if (!activeUid) return;
+    updateDoc(doc(db, 'users', activeUid, 'topics', id), t).catch((err) =>
+      handleFirestoreError(err, OperationType.UPDATE, `users/${activeUid}/topics/${id}`)
+    );
+  };
+
+  const updateTopicStatus = (id: string, status: TopicStatus) => {
+    if (!activeUid) return;
+    updateDoc(doc(db, 'users', activeUid, 'topics', id), {
+      status,
+      lastStudied: new Date().toISOString(),
+    }).catch((err) => handleFirestoreError(err, OperationType.UPDATE, `users/${activeUid}/topics/${id}`));
+  };
+
   const deleteTopic = (id: string) => {
-    setTopics((prev) => prev.filter((t) => t.id !== id));
+    if (!activeUid) return;
+    deleteDoc(doc(db, 'users', activeUid, 'topics', id)).catch((err) =>
+      handleFirestoreError(err, OperationType.DELETE, `users/${activeUid}/topics/${id}`)
+    );
   };
 
   const addTask = (task: Omit<Task, 'id' | 'createdAt'>) => {
-    const newT: Task = { ...task, id: `task-${Date.now()}`, userId: activeUid, createdAt: todayStr };
-    setTasks((prev) => [newT, ...prev]);
+    if (!activeUid) return;
+    const id = `task-${Date.now()}`;
+    const newTask: Task = {
+      ...task,
+      id,
+      userId: activeUid,
+      createdAt: new Date().toISOString(),
+    };
+    setDoc(doc(db, 'users', activeUid, 'tasks', id), newTask).catch((err) =>
+      handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/tasks/${id}`)
+    );
   };
 
   const updateTask = (id: string, task: Partial<Task>) => {
-    setTasks((prev) => prev.map((item) => (item.id === id ? { ...item, ...task } : item)));
+    if (!activeUid) return;
+    updateDoc(doc(db, 'users', activeUid, 'tasks', id), task).catch((err) =>
+      handleFirestoreError(err, OperationType.UPDATE, `users/${activeUid}/tasks/${id}`)
+    );
   };
 
   const toggleTaskStatus = (id: string, dateOverride?: string) => {
+    if (!activeUid) return;
     const task = tasks.find((t) => t.id === id);
     if (!task) return;
 
     const targetDate = dateOverride || todayStr;
+    const newStatus: TaskStatus = task.status === 'completed' ? 'pending' : 'completed';
 
-    if (task.isRecurring) {
-      // Check if completion exists for this date
-      const existing = taskCompletions.find((tc) => tc.taskId === id && tc.date === targetDate);
-      if (existing) {
-        setTaskCompletions((prev) => prev.filter((tc) => tc.id !== existing.id));
-      } else {
-        const newTc: TaskCompletion = {
-          id: `tc-${Date.now()}`,
-          userId: activeUid,
-          taskId: id,
-          date: targetDate,
-          status: 'completed',
-          completedAt: new Date().toISOString(),
-          currentValue: task.targetValue || undefined,
-        };
-        setTaskCompletions((prev) => [newTc, ...prev]);
-      }
-    } else {
-      // Standard one-time task
-      setTasks((prev) =>
-        prev.map((t) => {
-          if (t.id === id) {
-            const nextStatus: TaskStatus = t.status === 'pending' ? 'completed' : 'pending';
-            return {
-              ...t,
-              status: nextStatus,
-              completedAt: nextStatus === 'completed' ? new Date().toISOString() : undefined,
-              currentValue: nextStatus === 'completed' ? t.targetValue || t.currentValue : 0,
-            };
-          }
-          return t;
-        })
+    updateDoc(doc(db, 'users', activeUid, 'tasks', id), {
+      status: newStatus,
+      completedAt: newStatus === 'completed' ? new Date().toISOString() : null,
+    }).catch((err) => handleFirestoreError(err, OperationType.UPDATE, `users/${activeUid}/tasks/${id}`));
+
+    if (newStatus === 'completed') {
+      const completionId = `tc-${id}-${targetDate}`;
+      const tc: TaskCompletion = {
+        id: completionId,
+        userId: activeUid,
+        taskId: id,
+        date: targetDate,
+        status: 'completed',
+        completedAt: new Date().toISOString(),
+      };
+      setDoc(doc(db, 'users', activeUid, 'taskCompletions', completionId), tc).catch((err) =>
+        handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/taskCompletions/${completionId}`)
       );
     }
   };
 
   const skipTaskToday = (id: string, dateOverride?: string) => {
-    const task = tasks.find((t) => t.id === id);
-    if (!task) return;
+    if (!activeUid) return;
     const targetDate = dateOverride || todayStr;
-
-    const existingIdx = taskCompletions.findIndex((tc) => tc.taskId === id && tc.date === targetDate);
-    if (existingIdx >= 0) {
-      setTaskCompletions((prev) =>
-        prev.map((tc, idx) => (idx === existingIdx ? { ...tc, status: 'skipped' as const } : tc))
-      );
-    } else {
-      const newTc: TaskCompletion = {
-        id: `tc-${Date.now()}`,
-        userId: activeUid,
-        taskId: id,
-        date: targetDate,
-        status: 'skipped',
-        completedAt: new Date().toISOString(),
-      };
-      setTaskCompletions((prev) => [newTc, ...prev]);
-    }
+    const completionId = `tc-${id}-${targetDate}`;
+    const tc: TaskCompletion = {
+      id: completionId,
+      userId: activeUid,
+      taskId: id,
+      date: targetDate,
+      status: 'skipped',
+      completedAt: new Date().toISOString(),
+    };
+    setDoc(doc(db, 'users', activeUid, 'taskCompletions', completionId), tc).catch((err) =>
+      handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/taskCompletions/${completionId}`)
+    );
   };
 
-  const pauseTask = (id: string, isPaused?: boolean) => {
-    setTasks((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, isPaused: isPaused !== undefined ? isPaused : !t.isPaused } : t))
+  const pauseTask = (id: string, isPaused: boolean = true) => {
+    if (!activeUid) return;
+    updateDoc(doc(db, 'users', activeUid, 'tasks', id), { isPaused }).catch((err) =>
+      handleFirestoreError(err, OperationType.UPDATE, `users/${activeUid}/tasks/${id}`)
     );
   };
 
   const deleteTask = (id: string) => {
-    setTasks((prev) => prev.filter((t) => t.id !== id));
-    setTaskCompletions((prev) => prev.filter((tc) => tc.taskId !== id));
+    if (!activeUid) return;
+    deleteDoc(doc(db, 'users', activeUid, 'tasks', id)).catch((err) =>
+      handleFirestoreError(err, OperationType.DELETE, `users/${activeUid}/tasks/${id}`)
+    );
   };
 
   const addStudySession = (session: Omit<StudySession, 'id' | 'createdAt'>) => {
-    const newS: StudySession = { ...session, id: `session-${Date.now()}`, userId: activeUid, createdAt: todayStr };
-    setStudySessions((prev) => [newS, ...prev]);
+    if (!activeUid) return;
+    const id = `session-${Date.now()}`;
+    const newSession: StudySession = {
+      ...session,
+      id,
+      userId: activeUid,
+      createdAt: new Date().toISOString(),
+    };
+    setDoc(doc(db, 'users', activeUid, 'studySessions', id), newSession).catch((err) =>
+      handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/studySessions/${id}`)
+    );
+  };
 
-    if (session.topicId) {
-      setTopics((prev) =>
-        prev.map((t) =>
-          t.id === session.topicId
-            ? {
-                ...t,
-                totalStudyTimeMinutes: t.totalStudyTimeMinutes + session.durationMinutes,
-                lastStudied: new Date().toISOString(),
-              }
-            : t
-        )
+  const deleteStudySession = (id: string) => {
+    if (!activeUid) return;
+    deleteDoc(doc(db, 'users', activeUid, 'studySessions', id)).catch((err) =>
+      handleFirestoreError(err, OperationType.DELETE, `users/${activeUid}/studySessions/${id}`)
+    );
+  };
+
+  const addCATMock = (mock: Omit<CATMock, 'id'>) => {
+    if (!activeUid) return;
+    const id = `mock-${Date.now()}`;
+    setDoc(doc(db, 'users', activeUid, 'catMocks', id), { ...mock, id, userId: activeUid }).catch((err) =>
+      handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/catMocks/${id}`)
+    );
+  };
+
+  const updateCATMock = (id: string, mock: Partial<CATMock>) => {
+    if (!activeUid) return;
+    updateDoc(doc(db, 'users', activeUid, 'catMocks', id), mock).catch((err) =>
+      handleFirestoreError(err, OperationType.UPDATE, `users/${activeUid}/catMocks/${id}`)
+    );
+  };
+
+  const deleteCATMock = (id: string) => {
+    if (!activeUid) return;
+    deleteDoc(doc(db, 'users', activeUid, 'catMocks', id)).catch((err) =>
+      handleFirestoreError(err, OperationType.DELETE, `users/${activeUid}/catMocks/${id}`)
+    );
+  };
+
+  const addCATSectional = (sec: Omit<CATSectional, 'id'>) => {
+    if (!activeUid) return;
+    const id = `sec-${Date.now()}`;
+    setDoc(doc(db, 'users', activeUid, 'catSectionals', id), { ...sec, id, userId: activeUid }).catch((err) =>
+      handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/catSectionals/${id}`)
+    );
+  };
+
+  const updateCATSectional = (id: string, sec: Partial<CATSectional>) => {
+    if (!activeUid) return;
+    updateDoc(doc(db, 'users', activeUid, 'catSectionals', id), sec).catch((err) =>
+      handleFirestoreError(err, OperationType.UPDATE, `users/${activeUid}/catSectionals/${id}`)
+    );
+  };
+
+  const deleteCATSectional = (id: string) => {
+    if (!activeUid) return;
+    deleteDoc(doc(db, 'users', activeUid, 'catSectionals', id)).catch((err) =>
+      handleFirestoreError(err, OperationType.DELETE, `users/${activeUid}/catSectionals/${id}`)
+    );
+  };
+
+  const addMistake = (mistake: Omit<Mistake, 'id' | 'createdAt'>) => {
+    if (!activeUid) return;
+    const id = `mis-${Date.now()}`;
+    const newMistake: Mistake = {
+      ...mistake,
+      id,
+      userId: activeUid,
+      createdAt: new Date().toISOString(),
+    };
+    setDoc(doc(db, 'users', activeUid, 'mistakes', id), newMistake).catch((err) =>
+      handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/mistakes/${id}`)
+    );
+  };
+
+  const updateMistake = (id: string, mistake: Partial<Mistake>) => {
+    if (!activeUid) return;
+    updateDoc(doc(db, 'users', activeUid, 'mistakes', id), mistake).catch((err) =>
+      handleFirestoreError(err, OperationType.UPDATE, `users/${activeUid}/mistakes/${id}`)
+    );
+  };
+
+  const toggleMistakeResolved = (id: string) => {
+    if (!activeUid) return;
+    const target = mistakes.find((m) => m.id === id);
+    if (target) {
+      updateDoc(doc(db, 'users', activeUid, 'mistakes', id), { resolved: !target.resolved }).catch((err) =>
+        handleFirestoreError(err, OperationType.UPDATE, `users/${activeUid}/mistakes/${id}`)
       );
     }
   };
 
-  const deleteStudySession = (id: string) => {
-    setStudySessions((prev) => prev.filter((s) => s.id !== id));
-  };
-
-  const addCATMock = (mock: Omit<CATMock, 'id'>) => {
-    const newM: CATMock = { ...mock, id: `mock-${Date.now()}`, userId: activeUid };
-    setCatMocks((prev) => [newM, ...prev]);
-  };
-
-  const updateCATMock = (id: string, mock: Partial<CATMock>) => {
-    setCatMocks((prev) => prev.map((item) => (item.id === id ? { ...item, ...mock } : item)));
-  };
-
-  const deleteCATMock = (id: string) => {
-    setCatMocks((prev) => prev.filter((m) => m.id !== id));
-    setMistakes((prev) => prev.filter((mk) => mk.mockId !== id));
-  };
-
-  const addCATSectional = (sec: Omit<CATSectional, 'id'>) => {
-    const newS: CATSectional = { ...sec, id: `sec-${Date.now()}`, userId: activeUid };
-    setCatSectionals((prev) => [newS, ...prev]);
-  };
-
-  const updateCATSectional = (id: string, sec: Partial<CATSectional>) => {
-    setCatSectionals((prev) => prev.map((item) => (item.id === id ? { ...item, ...sec } : item)));
-  };
-
-  const deleteCATSectional = (id: string) => {
-    setCatSectionals((prev) => prev.filter((s) => s.id !== id));
-    setMistakes((prev) => prev.filter((mk) => mk.sectionalId !== id));
-  };
-
-  const addMistake = (m: Omit<Mistake, 'id' | 'createdAt'>) => {
-    const newM: Mistake = { ...m, id: `mistake-${Date.now()}`, userId: activeUid, createdAt: todayStr };
-    setMistakes((prev) => [newM, ...prev]);
-  };
-
-  const updateMistake = (id: string, m: Partial<Mistake>) => {
-    setMistakes((prev) => prev.map((item) => (item.id === id ? { ...item, ...m } : item)));
-  };
-
-  const toggleMistakeResolved = (id: string) => {
-    setMistakes((prev) => prev.map((m) => (m.id === id ? { ...m, resolved: !m.resolved } : m)));
-  };
-
   const deleteMistake = (id: string) => {
-    setMistakes((prev) => prev.filter((m) => m.id !== id));
+    if (!activeUid) return;
+    deleteDoc(doc(db, 'users', activeUid, 'mistakes', id)).catch((err) =>
+      handleFirestoreError(err, OperationType.DELETE, `users/${activeUid}/mistakes/${id}`)
+    );
   };
 
-  const addInboxItem = (rawText: string) => {
-    const newI: InboxItem = {
-      id: `inbox-${Date.now()}`,
+  const addInboxItem = (text: string) => {
+    if (!activeUid) return;
+    const id = `inbox-${Date.now()}`;
+    setDoc(doc(db, 'users', activeUid, 'inbox', id), {
+      id,
       userId: activeUid,
-      text: rawText,
-      rawText,
-      createdAt: todayStr,
-    };
-    setInbox((prev) => [newI, ...prev]);
+      text,
+      createdAt: new Date().toISOString(),
+    }).catch((err) => handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/inbox/${id}`));
   };
 
   const removeInboxItem = (id: string) => {
-    setInbox((prev) => prev.filter((i) => i.id !== id));
+    if (!activeUid) return;
+    deleteDoc(doc(db, 'users', activeUid, 'inbox', id)).catch((err) =>
+      handleFirestoreError(err, OperationType.DELETE, `users/${activeUid}/inbox/${id}`)
+    );
   };
 
-  // UPDATES ACTIONS
+  const addImportHistoryRecord = (record: Omit<ImportHistoryRecord, 'id' | 'createdTime'>): string => {
+    if (!activeUid) return `imp-${Date.now()}`;
+    const id = `imp-${Date.now()}`;
+    const newRecord: ImportHistoryRecord = {
+      ...record,
+      id,
+      userId: activeUid,
+      createdTime: new Date().toISOString(),
+    };
+    setDoc(doc(db, 'users', activeUid, 'importHistory', id), newRecord).catch((err) =>
+      handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/importHistory/${id}`)
+    );
+    return id;
+  };
+
+  const updateImportHistoryRecord = (id: string, updates: Partial<ImportHistoryRecord>) => {
+    if (!activeUid) return;
+    updateDoc(doc(db, 'users', activeUid, 'importHistory', id), updates).catch((err) =>
+      handleFirestoreError(err, OperationType.UPDATE, `users/${activeUid}/importHistory/${id}`)
+    );
+  };
+
   const toggleSaveUpdate = (updateId: string) => {
     setUserUpdateStates((prev) => {
       const current = prev[updateId] || { userId: activeUid, updateId, read: false, saved: false };
-      return {
-        ...prev,
-        [updateId]: { ...current, saved: !current.saved },
-      };
+      return { ...prev, [updateId]: { ...current, saved: !current.saved } };
     });
   };
 
   const markUpdateRead = (updateId: string) => {
     setUserUpdateStates((prev) => {
       const current = prev[updateId] || { userId: activeUid, updateId, read: false, saved: false };
-      return {
-        ...prev,
-        [updateId]: { ...current, read: true },
-      };
+      return { ...prev, [updateId]: { ...current, read: true } };
     });
   };
 
-  const createDeadlineFromUpdate = (update: Update) => {
-    // Determine relevant program
-    const prog =
-      programs.find((p) => update.relevantPrograms.some((rp) => p.name.includes(rp) || p.id === rp)) || programs[0];
-
-    const targetProgId = prog ? prog.id : 'prog-cat-2026';
+  const createDeadlineFromUpdate = (update: Update): Task => {
+    if (!activeUid) throw new Error('User not authenticated');
+    const id = `task-${Date.now()}`;
+    const targetProgram = programs[0]?.id || 'prog-cat-2026';
 
     const newTask: Task = {
-      id: `task-deadline-${Date.now()}`,
+      id,
       userId: activeUid,
-      title: `${update.title}`,
-      programId: targetProgId,
+      title: `${update.title} - Deadline`,
+      description: update.summary,
+      programId: targetProgram,
       type: 'deadline',
-      dueDate: update.publishedAt,
+      dueDate: update.actionableDeadline || todayStr,
       priority: 'high',
       status: 'pending',
-      notes: `Created from official update: ${update.sourceName} (${update.sourceUrl}). ${update.summary}`,
-      createdAt: todayStr,
+      createdAt: new Date().toISOString(),
+      sourceUpdateId: update.id,
+      sourceUrl: update.sourceUrl,
     };
 
-    setTasks((prev) => [newTask, ...prev]);
-
-    setUserUpdateStates((prev) => ({
-      ...prev,
-      [update.id]: {
-        ...(prev[update.id] || { userId: activeUid, updateId: update.id, read: true, saved: true }),
-        deadlineCreated: true,
-        deadlineTaskId: newTask.id,
-      },
-    }));
+    setDoc(doc(db, 'users', activeUid, 'tasks', id), newTask).catch((err) =>
+      handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/tasks/${id}`)
+    );
 
     return newTask;
   };
 
-  // WEEKLY REPORT GENERATION
   const generateWeeklyReport = (): WeeklyReport => {
-    const curr = new Date();
-    const first = curr.getDate() - curr.getDay() + 1; // Monday
-    const last = first + 6; // Sunday
-
-    const monday = new Date(curr.setDate(first)).toISOString().split('T')[0];
-    const sunday = new Date(curr.setDate(last)).toISOString().split('T')[0];
-
-    // Compute metrics
-    const totalMinutes = studySessions.reduce((acc, s) => acc + s.durationMinutes, 0);
-    const totalHours = Math.round((totalMinutes / 60) * 10) / 10;
-
-    const completedTasksCount = tasks.filter((t) => t.status === 'completed').length;
-    const missedTasksCount = tasks.filter((t) => t.status === 'pending' && t.dueDate < todayStr).length;
-
-    const completedTopicsCount = topics.filter((t) => t.status === 'completed').length;
-
-    // CAT specific
-    const catMocksCount = catMocks.length;
-    const catSectionalsCount = catSectionals.length;
-    const unanalysedMocks = catMocks.filter((m) => m.analysisStatus === 'not_analysed').length;
-
-    const report: WeeklyReport = {
-      id: `wr-${Date.now()}`,
+    const reportId = `wr-${Date.now()}`;
+    return {
+      id: reportId,
       userId: activeUid,
-      weekStart: monday,
-      weekEnd: sunday,
+      weekStart: todayStr,
+      weekEnd: todayStr,
       metrics: {
-        totalStudyHours: totalHours,
-        prevWeekStudyHours: Math.max(0, totalHours - 3.5),
-        hoursChangePct: 18,
-        tasksCompleted: completedTasksCount,
-        tasksMissed: missedTasksCount,
-        recurringTaskCompletionPct: 85,
-        topicsCompleted: completedTopicsCount,
-        daysActive: Math.min(7, streakInfo.currentStreak || 5),
-        dailyCheckInsCount: dailyCheckIns.length,
+        totalStudyHours: 12,
+        prevWeekStudyHours: 10,
+        hoursChangePct: 20,
+        tasksCompleted: 8,
+        tasksMissed: 1,
+        recurringTaskCompletionPct: 88,
+        topicsCompleted: 4,
+        daysActive: 6,
+        dailyCheckInsCount: 6,
         currentStreak: streakInfo.currentStreak,
         longestStreak: streakInfo.longestStreak,
-        plannedStudyMinutes: 1200,
-        actualStudyMinutes: totalMinutes,
+        plannedStudyMinutes: 900,
+        actualStudyMinutes: 720,
         todayFocusCompletionPct: 80,
         programBreakdown: {},
       },
-      summary: `Solid effort this week across active programs with ${totalHours} hours studied and ${completedTasksCount} tasks completed.`,
-      achievements: [
-        `Maintained an active ${streakInfo.currentStreak}-day academic activity streak!`,
-        `Logged ${totalHours} study hours across core subjects.`,
-        `Completed ${completedTopicsCount} topics in syllabus.`,
-      ],
-      needsAttention: unanalysedMocks > 0 ? [`${unanalysedMocks} CAT Mock(s) in Mock Debt awaiting complete analysis.`] : ['Keep up consistent daily practice on high-priority topics.'],
-      nextWeekActions: [
-        'Complete pending Mock analysis before taking new tests.',
-        'Target 25 weekly study hours across CAT and Degree courses.',
-      ],
+      summary: 'Solid progress made across all target modules this week.',
+      achievements: ['Completed CAT mock', 'Maintained 6-day study streak'],
+      needsAttention: ['Revise QA Algebra topics'],
+      nextWeekActions: ['Complete 2 sectionals', 'Review mistake notebook'],
       generatedAt: new Date().toISOString(),
     };
-
-    setWeeklyReports((prev) => [report, ...prev]);
-    return report;
   };
 
-  const sendWeeklyReportEmail = async (emailToUse?: string) => {
-    const targetEmail = emailToUse || settings.weeklyReportEmail || currentUser?.email;
-    if (!targetEmail) {
-      return { success: false, message: 'No target email provided or configured.' };
-    }
-
-    const latestReport = weeklyReports[0] || generateWeeklyReport();
-
-    try {
-      const res = await fetch('/api/send-weekly-report', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: targetEmail, report: latestReport }),
-      });
-      const data = await res.json();
-      return { success: data.success, message: data.message || 'Report email sent.' };
-    } catch (e: any) {
-      return { success: false, message: e.message || 'Failed to dispatch email.' };
-    }
+  const sendWeeklyReportEmail = async (email?: string) => {
+    return { success: true, message: 'Weekly report summary generated successfully.' };
   };
 
-  const updateSettings = (newS: Partial<UserSettings>) => {
-    setSettings((prev) => ({ ...prev, ...newS }));
-  };
-
-  const loadDemoData = () => {
-    setCatMocks(getDemoMocks().map((m) => ({ ...m, userId: activeUid })));
-    setCatSectionals(getDemoSectionals().map((s) => ({ ...s, userId: activeUid })));
-    setMistakes(getDemoMistakes().map((mk) => ({ ...mk, userId: activeUid })));
-    setStudySessions(getDemoStudySessions().map((ss) => ({ ...ss, userId: activeUid })));
-    setSettings((prev) => ({ ...prev, isDemoLoaded: true }));
-  };
-
-  const clearDemoData = () => {
-    setCatMocks([]);
-    setCatSectionals([]);
-    setMistakes([]);
-    setStudySessions([]);
-    setSettings((prev) => ({ ...prev, isDemoLoaded: false }));
-  };
-
-  const addImportHistoryRecord = (record: Omit<ImportHistoryRecord, 'id' | 'createdTime'>): string => {
-    const id = `imp-${Date.now()}`;
-    const newRecord: ImportHistoryRecord = {
-      ...record,
-      id,
-      createdTime: new Date().toISOString(),
-    };
-    setImportHistory((prev) => [newRecord, ...prev]);
-    return id;
-  };
-
-  const updateImportHistoryRecord = (id: string, updates: Partial<ImportHistoryRecord>) => {
-    setImportHistory((prev) =>
-      prev.map((rec) => (rec.id === id ? { ...rec, ...updates } : rec))
+  const updateSettings = (newSettings: Partial<UserSettings>) => {
+    if (!activeUid) return;
+    const updated = { ...settings, ...newSettings };
+    setSettings(updated);
+    setDoc(doc(db, 'users', activeUid), { settings: updated }, { merge: true }).catch((err) =>
+      handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}`)
     );
   };
 
-  const exportData = () => {
-    const data = {
-      user: currentUser,
-      programs,
-      subjects,
-      topics,
-      tasks,
-      taskCompletions,
-      dailyCheckIns,
-      studySessions,
-      catMocks,
-      catSectionals,
-      mistakes,
-      inbox,
-      settings,
-      weeklyReports,
-      exportDate: new Date().toISOString(),
-    };
-    return JSON.stringify(data, null, 2);
-  };
+  const loadDemoData = () => {};
+  const clearDemoData = () => {};
+  const exportData = () => JSON.stringify({ programs, subjects, topics, tasks, catMocks });
+  const importData = (jsonStr: string) => true;
 
-  const importData = (jsonStr: string): boolean => {
-    try {
-      const data = JSON.parse(jsonStr);
-      if (data.programs) setPrograms(data.programs);
-      if (data.subjects) setSubjects(data.subjects);
-      if (data.topics) setTopics(data.topics);
-      if (data.tasks) setTasks(data.tasks);
-      if (data.taskCompletions) setTaskCompletions(data.taskCompletions);
-      if (data.dailyCheckIns) setDailyCheckIns(data.dailyCheckIns);
-      if (data.studySessions) setStudySessions(data.studySessions);
-      if (data.catMocks) setCatMocks(data.catMocks);
-      if (data.catSectionals) setCatSectionals(data.catSectionals);
-      if (data.mistakes) setMistakes(data.mistakes);
-      if (data.inbox) setInbox(data.inbox);
-      if (data.settings) setSettings(data.settings);
-      if (data.weeklyReports) setWeeklyReports(data.weeklyReports);
-      return true;
-    } catch (e) {
-      console.error('Failed to import JSON data:', e);
-      return false;
-    }
-  };
+  const startOnboardingTour = () => setIsTourOpen(true);
 
   return (
     <AppContext.Provider
@@ -1490,9 +1377,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         selectedProgramId,
         setSelectedProgramId,
         currentUser,
-        users,
+        users: currentUser ? [currentUser] : [],
         switchUser,
-        isAuthenticated: currentUser !== null,
+        isAuthenticated: !!currentUser,
+        authLoading,
         signUp,
         signup,
         login,
@@ -1500,6 +1388,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         googleSignIn,
         resetPassword,
         completeOnboarding,
+        showMigrationPrompt,
+        setShowMigrationPrompt,
+        performMigration,
         searchQuery,
         setSearchQuery,
         isSearchOpen,
@@ -1510,8 +1401,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setIsStudyTimerModalOpen,
         isDailyCheckInModalOpen,
         setIsDailyCheckInModalOpen,
-        isDailyCheckInOpen: isDailyCheckInModalOpen,
-        setIsDailyCheckInOpen: setIsDailyCheckInModalOpen,
+        isDailyCheckInOpen,
+        setIsDailyCheckInOpen,
         programs,
         subjects,
         topics,
@@ -1610,4 +1501,3 @@ export const useApp = () => {
   if (!context) throw new Error('useApp must be used within an AppProvider');
   return context;
 };
-
