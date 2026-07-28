@@ -83,39 +83,39 @@ export const ScheduleMockModal: React.FC<ScheduleMockModalProps> = ({
       if (existingType === 'mock') {
         updateCATMock(existingMock.id, {
           name: name.trim(),
-          provider,
+          provider: provider || 'IMS',
           date,
-          startTime,
-          durationMinutes,
-          notes,
-          analysisDeadline: analysisDeadline || undefined,
+          startTime: startTime || '10:00 AM',
+          durationMinutes: durationMinutes || 120,
+          notes: notes || '',
+          analysisDeadline: analysisDeadline || '',
           status: 'rescheduled',
         });
       } else {
         updateCATSectional(existingMock.id, {
           name: name.trim(),
-          provider,
+          provider: provider || 'General',
           date,
-          startTime,
-          durationMinutes,
-          notes,
-          analysisDeadline: analysisDeadline || undefined,
+          startTime: startTime || '06:00 PM',
+          durationMinutes: durationMinutes || 40,
+          notes: notes || '',
+          analysisDeadline: analysisDeadline || '',
           status: 'rescheduled',
         });
       }
     } else {
       scheduleMock({
         name: name.trim(),
-        provider,
+        provider: provider || 'IMS',
         date,
-        startTime,
+        startTime: startTime || '10:00 AM',
         durationMinutes,
         testType,
         programId,
-        analysisDeadline: analysisDeadline || undefined,
-        notes,
-        isRecurring,
-        recurrenceType: isRecurring ? recurrenceType : undefined,
+        analysisDeadline: analysisDeadline || '',
+        notes: notes || '',
+        isRecurring: !!isRecurring,
+        recurrenceType: isRecurring ? recurrenceType : null,
       });
     }
 

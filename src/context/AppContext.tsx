@@ -19,7 +19,7 @@ import {
   getDoc,
   writeBatch,
 } from 'firebase/firestore';
-import { auth, db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { auth, db, handleFirestoreError, OperationType, sanitizeFirestoreData } from '../lib/firebase';
 import { checkForLegacyData, migrateLegacyDataToFirestore } from '../lib/migration';
 import {
   Program,
@@ -684,7 +684,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!activeUid) throw new Error('User not authenticated');
     if (data.testType === 'full_cat' || data.testType === 'other_test') {
       const id = `mock-${Date.now()}`;
-      const newM: CATMock = {
+      const rawM: CATMock = {
         id,
         userId: activeUid,
         name: data.name.trim(),
@@ -706,12 +706,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         dilr: { score: null, percentile: null, attempted: null, correct: null, incorrect: null, unattempted: null, accuracy: null, timeSpentMinutes: null },
         qa: { score: null, percentile: null, attempted: null, correct: null, incorrect: null, unattempted: null, accuracy: null, timeSpentMinutes: null },
         analysisStatus: 'not_analysed',
-        analysisDeadline: data.analysisDeadline,
-        notes: data.notes,
-        isRecurring: data.isRecurring,
-        recurrenceType: data.recurrenceType,
-        recurrenceDays: data.recurrenceDays,
+        analysisDeadline: data.analysisDeadline || null,
+        notes: data.notes || '',
+        isRecurring: !!data.isRecurring,
+        recurrenceType: data.isRecurring ? (data.recurrenceType || null) : null,
+        recurrenceDays: data.recurrenceDays || [],
       };
+      const newM = sanitizeFirestoreData(rawM);
       setDoc(doc(db, 'users', activeUid, 'catMocks', id), newM).catch((err) =>
         handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/catMocks/${id}`)
       );
@@ -720,7 +721,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const id = `sec-${Date.now()}`;
       const section: 'VARC' | 'DILR' | 'QA' =
         data.testType === 'varc_sectional' ? 'VARC' : data.testType === 'dilr_sectional' ? 'DILR' : 'QA';
-      const newS: CATSectional = {
+      const rawS: CATSectional = {
         id,
         userId: activeUid,
         name: data.name.trim(),
@@ -738,12 +739,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         unattempted: null,
         accuracy: null,
         durationMinutes: data.durationMinutes || 40,
-        analysisDeadline: data.analysisDeadline,
-        notes: data.notes,
-        isRecurring: data.isRecurring,
-        recurrenceType: data.recurrenceType,
-        recurrenceDays: data.recurrenceDays,
+        analysisDeadline: data.analysisDeadline || null,
+        notes: data.notes || '',
+        isRecurring: !!data.isRecurring,
+        recurrenceType: data.isRecurring ? (data.recurrenceType || null) : null,
+        recurrenceDays: data.recurrenceDays || [],
       };
+      const newS = sanitizeFirestoreData(rawS);
       setDoc(doc(db, 'users', activeUid, 'catSectionals', id), newS).catch((err) =>
         handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/catSectionals/${id}`)
       );
@@ -759,7 +761,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!activeUid) return;
     const subcoll = type === 'mock' ? 'catMocks' : 'catSectionals';
     const docRef = doc(db, 'users', activeUid, subcoll, id);
-    updateDoc(docRef, { ...result, status: 'completed' }).catch((err) =>
+    const cleanedResult = sanitizeFirestoreData({ ...result, status: 'completed' as const });
+    updateDoc(docRef, cleanedResult).catch((err) =>
       handleFirestoreError(err, OperationType.UPDATE, `users/${activeUid}/${subcoll}/${id}`)
     );
   };
@@ -1159,14 +1162,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addCATMock = (mock: Omit<CATMock, 'id'>) => {
     if (!activeUid) return;
     const id = `mock-${Date.now()}`;
-    setDoc(doc(db, 'users', activeUid, 'catMocks', id), { ...mock, id, userId: activeUid }).catch((err) =>
+    const cleaned = sanitizeFirestoreData({ ...mock, id, userId: activeUid });
+    setDoc(doc(db, 'users', activeUid, 'catMocks', id), cleaned).catch((err) =>
       handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/catMocks/${id}`)
     );
   };
 
   const updateCATMock = (id: string, mock: Partial<CATMock>) => {
     if (!activeUid) return;
-    updateDoc(doc(db, 'users', activeUid, 'catMocks', id), mock).catch((err) =>
+    const cleaned = sanitizeFirestoreData(mock);
+    updateDoc(doc(db, 'users', activeUid, 'catMocks', id), cleaned).catch((err) =>
       handleFirestoreError(err, OperationType.UPDATE, `users/${activeUid}/catMocks/${id}`)
     );
   };
@@ -1181,14 +1186,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addCATSectional = (sec: Omit<CATSectional, 'id'>) => {
     if (!activeUid) return;
     const id = `sec-${Date.now()}`;
-    setDoc(doc(db, 'users', activeUid, 'catSectionals', id), { ...sec, id, userId: activeUid }).catch((err) =>
+    const cleaned = sanitizeFirestoreData({ ...sec, id, userId: activeUid });
+    setDoc(doc(db, 'users', activeUid, 'catSectionals', id), cleaned).catch((err) =>
       handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/catSectionals/${id}`)
     );
   };
 
   const updateCATSectional = (id: string, sec: Partial<CATSectional>) => {
     if (!activeUid) return;
-    updateDoc(doc(db, 'users', activeUid, 'catSectionals', id), sec).catch((err) =>
+    const cleaned = sanitizeFirestoreData(sec);
+    updateDoc(doc(db, 'users', activeUid, 'catSectionals', id), cleaned).catch((err) =>
       handleFirestoreError(err, OperationType.UPDATE, `users/${activeUid}/catSectionals/${id}`)
     );
   };

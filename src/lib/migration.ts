@@ -1,5 +1,5 @@
 import { doc, setDoc, writeBatch } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from './firebase';
+import { db, handleFirestoreError, OperationType, sanitizeFirestoreData } from './firebase';
 
 export function checkForLegacyData(targetUid?: string): boolean {
   try {
@@ -80,7 +80,7 @@ export async function migrateLegacyDataToFirestore(targetUid: string): Promise<b
       for (const item of items) {
         if (!item || !item.id) continue;
         const itemDocRef = doc(db, 'users', targetUid, collName, String(item.id));
-        const cleanedItem = { ...item, userId: targetUid };
+        const cleanedItem = sanitizeFirestoreData({ ...item, userId: targetUid });
         await setDoc(itemDocRef, cleanedItem, { merge: true });
       }
     };
