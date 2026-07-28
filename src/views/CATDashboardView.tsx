@@ -66,7 +66,7 @@ export const CATDashboardView: React.FC = () => {
         <div>
           <div className="flex items-center gap-2 text-xs text-cyan-400 font-mono mb-1">
             <Target className="w-4 h-4" />
-            <span>CAT 2026 SPECIALIST DASHBOARD</span>
+            <span>EXAM PERFORMANCE DASHBOARD</span>
           </div>
           <h2 className="text-xl font-bold text-zinc-100">
             Aptitude Command Center
@@ -354,7 +354,7 @@ export const CATDashboardView: React.FC = () => {
             </div>
           ) : (
             <div className="py-8 text-center text-zinc-500 text-xs">
-              No full mocks logged yet. Click "+ Quick Add" to record your first SimCAT or AIMCAT!
+              No full mocks logged yet. Click "+ Quick Add" to record your first mock test!
             </div>
           )}
         </div>

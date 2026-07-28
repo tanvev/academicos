@@ -260,9 +260,9 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Navigation State
+  // Selected Program & Navigation
   const [currentView, setCurrentView] = useState<ViewMode>('dashboard');
-  const [selectedProgramId, setSelectedProgramId] = useState<string | null>('prog-cat-2026');
+  const [selectedProgramId, setSelectedProgramId] = useState<string | null>(null);
 
   // UI Modals
   const [searchQuery, setSearchQuery] = useState('');
@@ -304,9 +304,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const activeUid = currentUser?.uid || '';
 
+  // Helper to clear all user-owned in-memory collections
+  const clearAllUserDataState = () => {
+    setPrograms([]);
+    setSubjects([]);
+    setModules([]);
+    setTopics([]);
+    setTasks([]);
+    setTaskCompletions([]);
+    setDailyCheckIns([]);
+    setStudySessions([]);
+    setCatMocks([]);
+    setCatSectionals([]);
+    setMistakes([]);
+    setInbox([]);
+    setImportHistory([]);
+    setWeeklyReports([]);
+    setUserUpdateStates({});
+    setStudyTimer(null);
+    setSelectedProgramId(null);
+  };
+
   // 1. LISTEN TO FIREBASE AUTH STATE
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
+      clearAllUserDataState();
+
       if (fbUser) {
         try {
           const userRef = doc(db, 'users', fbUser.uid);
@@ -324,6 +347,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               onboardingCompleted: data.onboardingCompleted ?? true,
               ...data,
             };
+            if (data.settings) {
+              setSettings(data.settings);
+            } else {
+              setSettings({ ...STARTER_SETTINGS, userName: userProfile.name });
+            }
           } else {
             userProfile = {
               uid: fbUser.uid,
@@ -333,36 +361,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               createdAt: new Date().toISOString(),
               onboardingCompleted: true,
             };
-            await setDoc(userRef, userProfile, { merge: true });
+            const initialSettings = { ...STARTER_SETTINGS, userName: userProfile.name };
+            setSettings(initialSettings);
+            await setDoc(userRef, { ...userProfile, settings: initialSettings }, { merge: true });
           }
 
           setCurrentUser(userProfile);
 
-          // Check if legacy data exists in localStorage and migration not completed
-          if (!userSnap.data()?.legacyMigrationCompletedAt && checkForLegacyData()) {
-            setShowMigrationPrompt(true);
+          // Safe check if legacy data exists and migration not completed
+          if (!userSnap.data()?.legacyMigrationCompletedAt && checkForLegacyData(fbUser.uid)) {
+            const isOriginalLegacyUser =
+              fbUser.uid === localStorage.getItem('academicos_legacy_migrated_to_uid') ||
+              fbUser.email?.toLowerCase().includes('tanvi');
+            if (isOriginalLegacyUser) {
+              setShowMigrationPrompt(true);
+            }
           }
         } catch (e) {
           console.error('Error handling user auth profile:', e);
         }
       } else {
-        // Logged out - reset all in-memory collections
         setCurrentUser(null);
-        setPrograms([]);
-        setSubjects([]);
-        setModules([]);
-        setTopics([]);
-        setTasks([]);
-        setTaskCompletions([]);
-        setDailyCheckIns([]);
-        setStudySessions([]);
-        setCatMocks([]);
-        setCatSectionals([]);
-        setMistakes([]);
-        setInbox([]);
-        setImportHistory([]);
-        setWeeklyReports([]);
-        setUserUpdateStates({});
       }
       setAuthLoading(false);
     });
@@ -372,6 +391,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // 2. REAL-TIME FIRESTORE SUBSCRIPTIONS
   useEffect(() => {
+    clearAllUserDataState();
+
     if (!currentUser?.uid) return;
     const uid = currentUser.uid;
 
@@ -427,35 +448,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, [currentUser?.uid]);
 
-  // Seed default starter data into Firestore if user has zero programs and no legacy data
+  // Keep selectedProgramId in sync with loaded user programs
   useEffect(() => {
-    if (!currentUser?.uid || authLoading) return;
-    const checkAndSeed = async () => {
-      const uid = currentUser.uid;
-      const progRef = collection(db, 'users', uid, 'programs');
-      const snap = await getDoc(doc(db, 'users', uid));
-      if (snap.exists() && snap.data()?.legacyMigrationCompletedAt) return;
-
-      // Seed if empty after initial fetch
-      setTimeout(async () => {
-        if (programs.length === 0 && !checkForLegacyData()) {
-          for (const p of STARTER_PROGRAMS) {
-            await setDoc(doc(db, 'users', uid, 'programs', p.id), { ...p, userId: uid }, { merge: true });
-          }
-          for (const s of STARTER_SUBJECTS) {
-            await setDoc(doc(db, 'users', uid, 'subjects', s.id), { ...s, userId: uid }, { merge: true });
-          }
-          for (const t of getStarterTopics()) {
-            await setDoc(doc(db, 'users', uid, 'topics', t.id), { ...t, userId: uid }, { merge: true });
-          }
-          for (const task of getStarterTasks()) {
-            await setDoc(doc(db, 'users', uid, 'tasks', task.id), { ...task, userId: uid }, { merge: true });
-          }
-        }
-      }, 1200);
-    };
-    checkAndSeed();
-  }, [currentUser?.uid, authLoading]);
+    if (programs.length > 0) {
+      if (!selectedProgramId || !programs.some((p) => p.id === selectedProgramId)) {
+        setSelectedProgramId(programs[0].id);
+      }
+    } else {
+      setSelectedProgramId(null);
+    }
+  }, [programs]);
 
   // Fetch verified academic & exam updates on mount
   useEffect(() => {

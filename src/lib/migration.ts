@@ -1,8 +1,15 @@
 import { doc, setDoc, writeBatch } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from './firebase';
 
-export function checkForLegacyData(): boolean {
+export function checkForLegacyData(targetUid?: string): boolean {
   try {
+    if (localStorage.getItem('academicos_legacy_migration_done') === 'true') {
+      return false;
+    }
+    const migratedUid = localStorage.getItem('academicos_legacy_migrated_to_uid');
+    if (migratedUid && targetUid && migratedUid !== targetUid) {
+      return false;
+    }
     if (localStorage.getItem('academicos_users')) return true;
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
@@ -24,7 +31,7 @@ export async function migrateLegacyDataToFirestore(targetUid: string): Promise<b
   try {
     // 1. Identify legacy data keys
     const getLocal = <T>(key: string, fallbackKey?: string): T[] => {
-      const activeUid = localStorage.getItem('academicos_active_user_uid') || 'usr-tanvi';
+      const activeUid = localStorage.getItem('academicos_active_user_uid') || '';
       const userKey = `academicos_user_${activeUid}_${key}`;
       const saved = localStorage.getItem(userKey) || (fallbackKey ? localStorage.getItem(fallbackKey) : null);
       if (saved) {
@@ -39,7 +46,7 @@ export async function migrateLegacyDataToFirestore(targetUid: string): Promise<b
     };
 
     const getLocalObj = <T>(key: string, fallbackKey?: string): T | null => {
-      const activeUid = localStorage.getItem('academicos_active_user_uid') || 'usr-tanvi';
+      const activeUid = localStorage.getItem('academicos_active_user_uid') || '';
       const userKey = `academicos_user_${activeUid}_${key}`;
       const saved = localStorage.getItem(userKey) || (fallbackKey ? localStorage.getItem(fallbackKey) : null);
       if (saved) {
@@ -105,6 +112,9 @@ export async function migrateLegacyDataToFirestore(targetUid: string): Promise<b
       },
       { merge: true }
     );
+
+    localStorage.setItem('academicos_legacy_migration_done', 'true');
+    localStorage.setItem('academicos_legacy_migrated_to_uid', targetUid);
 
     return true;
   } catch (error) {

@@ -326,7 +326,7 @@ export async function handleUpdates(req: any, res: any) {
       fetchedAt: new Date().toISOString(),
       summary:
         'Official Convenor announcement for CAT 2026. Registration closes on 20 September 2026 with exam slated for November 2026 across 155 test cities.',
-      relevantPrograms: ['prog-cat-2026', 'CAT 2026', 'MBA', 'Exam'],
+      relevantPrograms: ['Competitive Exam', 'MBA', 'Exam'],
       hasActionableDeadline: true,
       actionableDeadline: '2026-09-20',
       deadlineType: 'registration',
@@ -343,7 +343,7 @@ export async function handleUpdates(req: any, res: any) {
       fetchedAt: new Date().toISOString(),
       summary:
         'Press Release: CAT 2026 registration deadline has been extended by 7 days until 27 September 2026 17:00 IST to accommodate candidates.',
-      relevantPrograms: ['prog-cat-2026', 'CAT 2026', 'MBA'],
+      relevantPrograms: ['Competitive Exam', 'MBA'],
       hasActionableDeadline: true,
       actionableDeadline: '2026-09-27',
       deadlineType: 'registration',
@@ -378,7 +378,7 @@ export async function handleUpdates(req: any, res: any) {
       fetchedAt: new Date().toISOString(),
       summary:
         'IITM BS Data Science term quiz registration deadline is approaching. Ensure all weekly graded assignments are submitted before 05 August 2026 23:59 IST.',
-      relevantPrograms: ['prog-iitm-bs', 'IITM BS DS', 'Academic'],
+      relevantPrograms: ['Degree', 'Data Science', 'Academic'],
       hasActionableDeadline: true,
       actionableDeadline: '2026-08-05',
       deadlineType: 'fee_payment',
@@ -394,7 +394,7 @@ export async function handleUpdates(req: any, res: any) {
       fetchedAt: new Date().toISOString(),
       summary:
         'IIM-A releases verified audited placement data showing high demand in Management Consulting, Product Management, and Quantitative Finance roles.',
-      relevantPrograms: ['prog-cat-2026', 'MBA', 'Career'],
+      relevantPrograms: ['Competitive Exam', 'MBA', 'Career'],
       hasActionableDeadline: false,
     },
     {
@@ -424,7 +424,7 @@ export async function handleUpdates(req: any, res: any) {
       fetchedAt: new Date().toISOString(),
       summary:
         'Department of Computer Science & Engineering MANIT Bhopal notifies all B.Tech students regarding mid-term evaluation submission & lab viva schedules. Mandatory submission deadline: 10 August 2026.',
-      relevantPrograms: ['prog-manit-btech', 'B.Tech CSE', 'Academic'],
+      relevantPrograms: ['Degree', 'Engineering', 'Academic'],
       hasActionableDeadline: true,
       actionableDeadline: '2026-08-10',
       deadlineType: 'document_submission',

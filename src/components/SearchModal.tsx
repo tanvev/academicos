@@ -65,7 +65,7 @@ export const SearchModal: React.FC = () => {
         <div className="max-h-96 overflow-y-auto p-3 space-y-4 custom-scrollbar">
           {!q ? (
             <div className="py-8 text-center text-zinc-500">
-              Type to search across Tanvi OS
+              Type to search across Academicos
             </div>
           ) : totalResults === 0 ? (
             <div className="py-8 text-center text-zinc-500">

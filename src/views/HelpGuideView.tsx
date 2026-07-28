@@ -47,7 +47,7 @@ export const HelpGuideView: React.FC = () => {
           </p>
           <ol className="list-decimal pl-5 space-y-1.5 font-medium text-slate-200">
             <li>
-              <strong className="text-cyan-300">Create your Programs:</strong> Add your degree (e.g. B.Tech), competitive exams (e.g. CAT 2026), or online certifications.
+              <strong className="text-cyan-300">Create your Programs:</strong> Add your university degree, competitive exam, or online certification.
             </li>
             <li>
               <strong className="text-cyan-300">Add/Import Syllabus:</strong> Set up subjects, modules, and topics manually or upload a PDF syllabus using Smart Import.
@@ -104,7 +104,7 @@ export const HelpGuideView: React.FC = () => {
         <div className="space-y-3 text-xs text-slate-300">
           <p>Syllabus is organized hierarchically:</p>
           <div className="p-3 bg-[#09090B] border border-[#27272A] rounded-xl font-mono text-[11px] text-indigo-300 space-y-1">
-            <p>&bull; Program (e.g. CAT 2026)</p>
+            <p>&bull; Program (e.g. Competitive Exam or University Degree)</p>
             <p className="pl-4">&bull; Subject (e.g. Quantitative Aptitude)</p>
             <p className="pl-8">&bull; Module (e.g. Arithmetic)</p>
             <p className="pl-12">&bull; Topic (e.g. Time & Work, Percentages)</p>

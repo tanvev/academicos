@@ -101,7 +101,7 @@ export const DashboardView: React.FC = () => {
           title: `[NON-NEGOTIABLE] ${mockMatch.name}`,
           estimatedMinutes: mockMatch.durationMinutes || 120,
           priority: 'high',
-          programName: 'CAT 2026',
+          programName: programs.find((p) => p.id === mockMatch.programId)?.name || programs[0]?.name || 'Program',
           dueDate: mockMatch.date,
           original: mockMatch,
         });
@@ -114,7 +114,7 @@ export const DashboardView: React.FC = () => {
           title: `[NON-NEGOTIABLE] ${secMatch.section}: ${secMatch.name}`,
           estimatedMinutes: secMatch.durationMinutes || 40,
           priority: 'high',
-          programName: 'CAT 2026',
+          programName: programs.find((p) => p.id === secMatch.programId)?.name || programs[0]?.name || 'Program',
           dueDate: secMatch.date,
           original: secMatch,
         });
@@ -133,7 +133,7 @@ export const DashboardView: React.FC = () => {
           title: todayMock.name,
           estimatedMinutes: todayMock.durationMinutes || 120,
           priority: 'high',
-          programName: 'CAT 2026',
+          programName: programs.find((p) => p.id === todayMock.programId)?.name || programs[0]?.name || 'Program',
           dueDate: todayMock.date,
           original: todayMock,
         });
@@ -207,12 +207,19 @@ export const DashboardView: React.FC = () => {
     });
 
     setFocusItems(items);
-    localStorage.setItem(`academicos_focus_plan_${todayStr}`, JSON.stringify(items));
+    if (currentUser?.uid) {
+      localStorage.setItem(`academicos_focus_plan_${currentUser.uid}_${todayStr}`, JSON.stringify(items));
+    }
   };
 
   // Load or generate focus items on mount / date change
   useEffect(() => {
-    const saved = localStorage.getItem(`academicos_focus_plan_${todayStr}`);
+    if (!currentUser?.uid) {
+      setFocusItems([]);
+      return;
+    }
+    const key = `academicos_focus_plan_${currentUser.uid}_${todayStr}`;
+    const saved = localStorage.getItem(key);
     if (saved) {
       try {
         setFocusItems(JSON.parse(saved));
@@ -222,12 +229,14 @@ export const DashboardView: React.FC = () => {
     } else {
       generateFocusPlan();
     }
-  }, [todayStr, tasks.length]);
+  }, [todayStr, tasks.length, currentUser?.uid]);
 
   const removeFocusItem = (id: string) => {
     const updated = focusItems.filter((i) => i.id !== id);
     setFocusItems(updated);
-    localStorage.setItem(`academicos_focus_plan_${todayStr}`, JSON.stringify(updated));
+    if (currentUser?.uid) {
+      localStorage.setItem(`academicos_focus_plan_${currentUser.uid}_${todayStr}`, JSON.stringify(updated));
+    }
   };
 
   const moveFocusItem = (index: number, direction: 'up' | 'down') => {
@@ -238,7 +247,9 @@ export const DashboardView: React.FC = () => {
     updated[index] = updated[targetIdx];
     updated[targetIdx] = temp;
     setFocusItems(updated);
-    localStorage.setItem(`academicos_focus_plan_${todayStr}`, JSON.stringify(updated));
+    if (currentUser?.uid) {
+      localStorage.setItem(`academicos_focus_plan_${currentUser.uid}_${todayStr}`, JSON.stringify(updated));
+    }
   };
 
   // Planned Capacity calculation
@@ -293,6 +304,43 @@ export const DashboardView: React.FC = () => {
 
   return (
     <div className="space-y-6 pb-12 text-slate-100">
+      {/* Welcome Banner for empty workspace */}
+      {programs.length === 0 && (
+        <div className="bg-gradient-to-r from-teal-950/40 via-zinc-900 to-indigo-950/40 border border-teal-500/30 p-6 rounded-2xl space-y-4 text-center sm:text-left flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="space-y-1">
+            <h3 className="text-lg font-bold text-white flex items-center gap-2 justify-center sm:justify-start">
+              <span>Welcome to Academicos</span> 👋
+            </h3>
+            <p className="text-xs text-zinc-400">
+              Let's build your academic workspace. Add your programs, import syllabus, and schedule your tasks or tests.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 shrink-0">
+            <button
+              onClick={() => setCurrentView('programs')}
+              className="bg-teal-500 hover:bg-teal-400 text-zinc-950 font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-md"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Program</span>
+            </button>
+            <button
+              onClick={() => setCurrentView('smart_import')}
+              className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-semibold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer border border-zinc-700"
+            >
+              <BookOpen className="w-4 h-4 text-cyan-400" />
+              <span>Import Syllabus</span>
+            </button>
+            <button
+              onClick={() => setIsQuickAddOpen(true)}
+              className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-semibold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer border border-zinc-700"
+            >
+              <Plus className="w-4 h-4 text-emerald-400" />
+              <span>Create First Task</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 1. GREETING + DATE + STREAK */}
       <div className="bg-[#18181B] border border-[#27272A] p-6 rounded-2xl relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="space-y-1">
@@ -665,37 +713,49 @@ export const DashboardView: React.FC = () => {
           Compact Program Progress
         </h3>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {activePrograms.map((prog) => {
-            const progTopics = topics.filter((t) => t.programId === prog.id);
-            const completedCount = progTopics.filter((t) => t.status === 'completed').length;
-            const pct = progTopics.length > 0 ? Math.round((completedCount / progTopics.length) * 100) : 0;
+        {activePrograms.length === 0 ? (
+          <div className="p-8 border border-dashed border-zinc-800 rounded-xl text-center space-y-2">
+            <p className="text-xs text-zinc-400">No active programs yet.</p>
+            <button
+              onClick={() => setCurrentView('programs')}
+              className="bg-teal-500 hover:bg-teal-400 text-zinc-950 font-bold px-3 py-1.5 rounded-xl text-xs transition-all cursor-pointer"
+            >
+              Add your first Program
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {activePrograms.map((prog) => {
+              const progTopics = topics.filter((t) => t.programId === prog.id);
+              const completedCount = progTopics.filter((t) => t.status === 'completed').length;
+              const pct = progTopics.length > 0 ? Math.round((completedCount / progTopics.length) * 100) : 0;
 
-            return (
-              <div
-                key={prog.id}
-                onClick={() => {
-                  setSelectedProgramId(prog.id);
-                  setCurrentView(prog.id === 'prog-cat-2026' ? 'cat_overview' : 'programs');
-                }}
-                className="p-4 rounded-xl border border-zinc-800 bg-zinc-950 hover:border-zinc-700 transition-all cursor-pointer space-y-2"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-xs text-zinc-200">{prog.name}</span>
-                  <span className="font-mono text-xs font-bold text-teal-400">{pct}%</span>
+              return (
+                <div
+                  key={prog.id}
+                  onClick={() => {
+                    setSelectedProgramId(prog.id);
+                    setCurrentView(prog.type === 'competitive_exam' ? 'cat_overview' : 'programs');
+                  }}
+                  className="p-4 rounded-xl border border-zinc-800 bg-zinc-950 hover:border-zinc-700 transition-all cursor-pointer space-y-2"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-xs text-zinc-200">{prog.name}</span>
+                    <span className="font-mono text-xs font-bold text-teal-400">{pct}%</span>
+                  </div>
+
+                  <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                    <div className="h-full bg-teal-500" style={{ width: `${pct}%` }} />
+                  </div>
+
+                  <span className="text-[10px] text-zinc-500 font-mono block">
+                    {completedCount} / {progTopics.length} Topics Completed
+                  </span>
                 </div>
-
-                <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                  <div className="h-full bg-teal-500" style={{ width: `${pct}%` }} />
-                </div>
-
-                <span className="text-[10px] text-zinc-500 font-mono block">
-                  {completedCount} / {progTopics.length} Topics Completed
-                </span>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

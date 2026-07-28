@@ -43,7 +43,7 @@ export const SettingsView: React.FC = () => {
     settings.emailWeeklyReport ?? true
   );
   const [weeklyReportEmail, setWeeklyReportEmail] = useState<string>(
-    settings.weeklyReportEmail || currentUser?.email || 'tanvisundarkar@gmail.com'
+    settings.weeklyReportEmail || currentUser?.email || ''
   );
   const [reportDay, setReportDay] = useState<string>(settings.reportDay || 'Monday');
   const [reportTime, setReportTime] = useState<string>(settings.reportTime || '08:00');
@@ -234,7 +234,7 @@ export const SettingsView: React.FC = () => {
               type="email"
               value={weeklyReportEmail}
               onChange={(e) => setWeeklyReportEmail(e.target.value)}
-              placeholder="tanvisundarkar@gmail.com"
+              placeholder="user@example.com"
               className="w-full bg-[#09090B] border border-[#27272A] focus:border-emerald-500 rounded-lg p-2 text-white"
             />
           </div>
@@ -360,7 +360,7 @@ export const SettingsView: React.FC = () => {
         </h3>
 
         <p className="text-slate-400 text-[11px]">
-          Academicos persists all your data locally in your browser storage (`localStorage`). Export a JSON backup to transfer data safely.
+          Academicos persists your academic data safely in Cloud Firestore under your account. Export a JSON backup to save a local copy anytime.
         </p>
 
         <div className="flex flex-wrap items-center gap-3 pt-1">
@@ -385,27 +385,14 @@ export const SettingsView: React.FC = () => {
         </div>
       </div>
 
-      {/* Reset & Demo Data Control */}
+      {/* Reset & Data Control */}
       <div className="bg-[#18181B] border border-[#27272A] rounded-2xl p-5 space-y-4 shadow-sm text-xs">
         <h3 className="font-bold text-white text-xs flex items-center gap-2">
           <RefreshCw className="w-4 h-4 text-amber-400" />
-          <span>Reset & Starter Data Controls</span>
+          <span>Reset & Workspace Controls</span>
         </h3>
 
         <div className="flex flex-wrap items-center gap-3">
-          <button
-            onClick={() => {
-              if (confirm('Load pre-populated starter demo data? This will append default CAT, MANIT, and IITM records.')) {
-                loadStarterData();
-                alert('Starter demo data loaded successfully!');
-              }
-            }}
-            className="bg-zinc-800 hover:bg-zinc-700 text-cyan-400 border border-zinc-700 font-semibold px-4 py-2 rounded-xl text-xs flex items-center gap-2 transition-all cursor-pointer"
-          >
-            <RefreshCw className="w-4 h-4" />
-            <span>Load Starter Demo Data</span>
-          </button>
-
           <button
             onClick={() => {
               if (confirm('DANGER: Clear all data and reset Academicos? This action cannot be undone unless you have a backup.')) {

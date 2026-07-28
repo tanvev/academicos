@@ -94,7 +94,7 @@ export const InboxView: React.FC = () => {
           <input
             type="text"
             required
-            placeholder="e.g. Solve 3 DILR sets on Friday or Submit MANIT CN Lab assignment by 14th Nov"
+            placeholder="e.g. Solve Chapter 3 problems on Friday or Submit Lab Assignment by 14th Nov"
             value={rawText}
             onChange={(e) => setRawText(e.target.value)}
             className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-100 focus:outline-none focus:border-amber-500"

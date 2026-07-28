@@ -57,7 +57,7 @@ export const AnalyticsView: React.FC = () => {
 
   // Weekly Email dispatch and Web Share states
   const [weeklyEmailRecipient, setWeeklyEmailRecipient] = useState<string>(
-    settings.weeklyReportEmail || currentUser?.email || 'tanvisundarkar@gmail.com'
+    settings.weeklyReportEmail || currentUser?.email || ''
   );
   const [emailStatus, setEmailStatus] = useState<'idle' | 'pending' | 'sent' | 'failed'>('idle');
   const [emailStatusMsg, setEmailStatusMsg] = useState<string | null>(null);
@@ -1191,7 +1191,7 @@ Mock Debt: ${totalMockDebtCount} unanalysed mocks`;
                   type="email"
                   value={weeklyEmailRecipient}
                   onChange={(e) => setWeeklyEmailRecipient(e.target.value)}
-                  placeholder="tanvisundarkar@gmail.com"
+                  placeholder="user@example.com"
                   className="bg-zinc-900 border border-zinc-800 focus:border-emerald-500 rounded-lg py-1.5 px-3 text-xs text-white outline-none w-full sm:w-64 font-mono"
                 />
               </div>

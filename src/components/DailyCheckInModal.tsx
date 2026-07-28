@@ -13,6 +13,7 @@ export const DailyCheckInModal: React.FC = () => {
     catMocks,
     catSectionals,
     addTask,
+    currentUser,
   } = useApp();
 
   const todayStr = new Date().toISOString().split('T')[0];
@@ -68,7 +69,8 @@ export const DailyCheckInModal: React.FC = () => {
   if (!isDailyCheckInOpen) return null;
 
   const handleSkip = () => {
-    sessionStorage.setItem(`academicos_checkin_skipped_${todayStr}`, 'true');
+    const key = currentUser?.uid ? `academicos_checkin_skipped_${currentUser.uid}_${todayStr}` : `academicos_checkin_skipped_${todayStr}`;
+    sessionStorage.setItem(key, 'true');
     setIsDailyCheckInOpen(false);
   };
 

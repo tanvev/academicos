@@ -163,7 +163,7 @@ export const AuthView: React.FC = () => {
                 <User className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
                 <input
                   type="text"
-                  placeholder="e.g. Tanvi Sundarkar"
+                  placeholder="e.g. Alex Smith"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="w-full bg-[#09090B] border border-[#27272A] focus:border-teal-400 rounded-xl py-2.5 pl-10 pr-3 text-xs text-white outline-none"

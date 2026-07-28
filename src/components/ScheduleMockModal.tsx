@@ -179,7 +179,7 @@ export const ScheduleMockModal: React.FC<ScheduleMockModalProps> = ({
               <input
                 type="text"
                 required
-                placeholder="e.g. SIMCAT 04, AIMCAT 2512"
+                placeholder="e.g. Full Mock Test 01, Sectional Test 02"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-purple-500"

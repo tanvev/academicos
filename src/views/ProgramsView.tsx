@@ -256,7 +256,7 @@ export const ProgramsView: React.FC = () => {
                 <input
                   type="text"
                   required
-                  placeholder="e.g. CAT 2026, B.Tech CSE, GMAT, AWS Cert"
+                  placeholder="e.g. Competitive Exam, Higher Education Degree, AWS Certification"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-zinc-100"
@@ -286,7 +286,7 @@ export const ProgramsView: React.FC = () => {
                   </label>
                   <input
                     type="text"
-                    placeholder="e.g. MANIT Bhopal, IIT Madras, IIM"
+                    placeholder="e.g. University Name, Examination Board, Institute"
                     value={institution}
                     onChange={(e) => setInstitution(e.target.value)}
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-zinc-100"

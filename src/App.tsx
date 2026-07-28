@@ -56,7 +56,7 @@ const MainContent: React.FC = () => {
     if (isAuthenticated && currentUser?.onboardingCompleted) {
       const todayStr = new Date().toISOString().split('T')[0];
       const hasCheckedInToday = dailyCheckIns.some((c) => c.date === todayStr);
-      const skippedToday = sessionStorage.getItem(`academicos_checkin_skipped_${todayStr}`);
+      const skippedToday = currentUser?.uid ? sessionStorage.getItem(`academicos_checkin_skipped_${currentUser.uid}_${todayStr}`) : null;
       if (!hasCheckedInToday && !skippedToday) {
         setIsDailyCheckInOpen(true);
       }

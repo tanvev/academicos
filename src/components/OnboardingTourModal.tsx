@@ -41,7 +41,7 @@ export const OnboardingTourModal: React.FC<OnboardingTourModalProps> = ({
       description: "Add everything you're currently studying or preparing for.",
       targetView: 'programs',
       detail:
-        'Group your subjects, modules, and topics under specific degrees (e.g. B.Tech), competitive exams (e.g. CAT 2026), or certifications.',
+        'Group your subjects, modules, and topics under specific degrees, competitive exams, or certifications.',
     },
     {
       title: 'Today',
