@@ -334,9 +334,23 @@ export interface InboxItem {
   createdAt: string;
 }
 
+export type AppThemeMode = 'midnight' | 'paper' | 'blossom';
+export type AppAccentColor = 'cyan' | 'blue' | 'purple' | 'pink' | 'emerald' | 'orange';
+
+export type AppAppearanceMode = 'light' | 'dark' | 'system' | 'auto';
+export type AppPalette = 'ocean' | 'blossom' | 'sunset';
+
+export interface AppearanceSettings {
+  mode: AppAppearanceMode;
+  palette: AppPalette;
+}
+
 export interface UserSettings {
   userName: string;
-  defaultTheme: 'dark';
+  defaultTheme: 'dark' | AppThemeMode;
+  themeMode?: AppThemeMode;
+  accentColor?: AppAccentColor;
+  appearance?: AppearanceSettings;
   weeklyStartDay: 'Monday' | 'Sunday';
   weeklyStudyTargets: Record<string, number>; // programId -> target hours
   catMockTarget: number;

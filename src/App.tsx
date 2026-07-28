@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
+import { ThemeProvider } from './context/ThemeContext';
 import { Sidebar } from './components/Sidebar';
 import { Topbar } from './components/Topbar';
 import { MobileNav } from './components/MobileNav';
@@ -175,9 +176,11 @@ const MainContent: React.FC = () => {
 export function App() {
   return (
     <AppProvider>
-      <ErrorBoundary>
-        <MainContent />
-      </ErrorBoundary>
+      <ThemeProvider>
+        <ErrorBoundary>
+          <MainContent />
+        </ErrorBoundary>
+      </ThemeProvider>
     </AppProvider>
   );
 }

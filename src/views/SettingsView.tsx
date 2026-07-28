@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
+import { useTheme } from '../context/ThemeContext';
+import { AppAppearanceMode, AppPalette } from '../types';
 import {
   Settings,
   Download,
@@ -17,6 +19,15 @@ import {
   Globe,
   Share2,
   Info,
+  Palette,
+  Moon,
+  Sun,
+  Laptop,
+  Sparkles,
+  Waves,
+  Flower2,
+  Sunset as SunsetIcon,
+  Check,
 } from 'lucide-react';
 
 export const SettingsView: React.FC = () => {
@@ -33,10 +44,90 @@ export const SettingsView: React.FC = () => {
     startOnboardingTour,
   } = useApp();
 
+  const { mode, palette, resolvedTheme, setMode, setPalette } = useTheme();
+
   const [userName, setUserName] = useState(settings.userName);
   const [catExamDate, setCatExamDate] = useState(settings.catExamDate);
   const [catMockTarget, setCatMockTarget] = useState(settings.catMockTarget);
   const [catSectionalTarget, setCatSectionalTarget] = useState(settings.catSectionalTarget);
+
+  const modes: Array<{
+    id: AppAppearanceMode;
+    name: string;
+    description: string;
+    icon: React.ElementType;
+  }> = [
+    {
+      id: 'light',
+      name: 'Light',
+      description: 'Crisp, high-clarity light canvas',
+      icon: Sun,
+    },
+    {
+      id: 'dark',
+      name: 'Dark',
+      description: 'Focused, eye-safe dark canvas',
+      icon: Moon,
+    },
+    {
+      id: 'system',
+      name: 'Follow System',
+      description: 'Syncs automatically with device OS preference',
+      icon: Laptop,
+    },
+    {
+      id: 'auto',
+      name: 'Auto Time',
+      description: 'Light (07:00 AM – 06:00 PM) • Dark (06:00 PM – 07:00 AM)',
+      icon: Clock,
+    },
+  ];
+
+  const palettes: Array<{
+    id: AppPalette;
+    name: string;
+    badge: string;
+    description: string;
+    feeling: string;
+    icon: React.ElementType;
+    previewBgDark: string;
+    previewBgLight: string;
+    previewPrimary: string;
+  }> = [
+    {
+      id: 'ocean',
+      name: 'Ocean',
+      badge: 'Default',
+      description: 'Deep navy background (Dark) / Crisp white (Light) with cyan primary accent.',
+      feeling: 'Modern, professional, productivity focused.',
+      icon: Waves,
+      previewBgDark: '#0a1128',
+      previewBgLight: '#ffffff',
+      previewPrimary: '#06b6d4',
+    },
+    {
+      id: 'blossom',
+      name: 'Blossom',
+      badge: 'Aesthetic',
+      description: 'Charcoal background (Dark) / Soft blush (Light) with pink rose accents.',
+      feeling: 'Calm, cozy, aesthetic.',
+      icon: Flower2,
+      previewBgDark: '#18181b',
+      previewBgLight: '#fdf2f8',
+      previewPrimary: '#ec4899',
+    },
+    {
+      id: 'sunset',
+      name: 'Sunset',
+      badge: 'Warm',
+      description: 'Deep plum background (Dark) / Warm cream (Light) with orange coral accents.',
+      feeling: 'Warm, energetic and motivating.',
+      icon: SunsetIcon,
+      previewBgDark: '#1f0b1e',
+      previewBgLight: '#fffbeb',
+      previewPrimary: '#f97316',
+    },
+  ];
 
   // Email settings state
   const [emailWeeklyReport, setEmailWeeklyReport] = useState<boolean>(
@@ -126,6 +217,269 @@ export const SettingsView: React.FC = () => {
         <p className="text-xs text-slate-400 mt-0.5">
           Configure profile details, exam targets, weekly email schedules, and data backups.
         </p>
+      </div>
+
+      {/* Appearance & Visual Theme Settings Section */}
+      <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-5 space-y-6 shadow-sm">
+        <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
+          <div className="flex items-center gap-2">
+            <Palette className="w-4 h-4 text-[var(--primary)]" />
+            <h3 className="font-bold text-[var(--text)] text-xs">
+              Appearance Settings
+            </h3>
+          </div>
+          <span className="text-[11px] text-[var(--text-secondary)] font-medium capitalize">
+            Mode: {mode} • Palette: {palette} ({resolvedTheme})
+          </span>
+        </div>
+
+        {/* 1. Display Mode Selection */}
+        <div className="space-y-2.5">
+          <label className="block text-[var(--text-secondary)] text-[11px] font-semibold">
+            Display Mode
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {modes.map((m) => {
+              const isActive = mode === m.id;
+              const IconComponent = m.icon;
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => setMode(m.id)}
+                  className={`relative p-3.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                    isActive
+                      ? 'border-[var(--primary)] bg-[var(--primary)]/10 shadow-xs'
+                      : 'border-[var(--border)] bg-[var(--background)] hover:border-[var(--text-secondary)]'
+                  }`}
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 font-bold text-xs text-[var(--text)]">
+                        <IconComponent className={`w-4 h-4 ${isActive ? 'text-[var(--primary)]' : 'text-[var(--text-secondary)]'}`} />
+                        <span>{m.name}</span>
+                      </div>
+                      {isActive && (
+                        <span className="w-4 h-4 rounded-full bg-[var(--primary)] text-[var(--primary-foreground)] flex items-center justify-center text-[10px] font-bold">
+                          ✓
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-[var(--text-secondary)] leading-snug">
+                      {m.description}
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* 2. Palette Selection */}
+        <div className="space-y-2.5">
+          <label className="block text-[var(--text-secondary)] text-[11px] font-semibold">
+            Theme Palette
+          </label>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {palettes.map((p) => {
+              const isActive = palette === p.id;
+              const IconComponent = p.icon;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setPalette(p.id)}
+                  className={`relative p-4 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between space-y-3 ${
+                    isActive
+                      ? 'border-[var(--primary)] bg-[var(--primary)]/10 shadow-xs'
+                      : 'border-[var(--border)] bg-[var(--background)] hover:border-[var(--text-secondary)]'
+                  }`}
+                >
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 font-bold text-xs text-[var(--text)]">
+                        <IconComponent className={`w-4 h-4 ${isActive ? 'text-[var(--primary)]' : 'text-[var(--text-secondary)]'}`} />
+                        <span>{p.name}</span>
+                      </div>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-md font-bold bg-[var(--surface-secondary)] text-[var(--text-secondary)] border border-[var(--border)]">
+                        {p.badge}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-[var(--text-secondary)] leading-snug">
+                      {p.description}
+                    </p>
+                    <div className="text-[9px] italic text-[var(--primary)] font-medium pt-1">
+                      Feeling: {p.feeling}
+                    </div>
+                  </div>
+
+                  {/* Dual Theme Swatch Bar */}
+                  <div className="flex items-center gap-2 p-2 rounded-lg bg-[var(--surface-secondary)] border border-[var(--border)]">
+                    <div className="flex-1 flex items-center gap-1.5 px-2 py-1 rounded bg-[#0f172a] text-white text-[9px] font-bold">
+                      <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: p.previewPrimary }} />
+                      <span>Dark</span>
+                    </div>
+                    <div className="flex-1 flex items-center gap-1.5 px-2 py-1 rounded bg-white text-slate-800 text-[9px] font-bold border border-slate-200">
+                      <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: p.previewPrimary }} />
+                      <span>Light</span>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* 3. Live Preview Card */}
+        <div className="space-y-2.5 pt-3 border-t border-[var(--border)]">
+          <div className="flex items-center justify-between">
+            <label className="text-[var(--text-secondary)] text-xs font-semibold flex items-center gap-2">
+              <Sparkles className="w-3.5 h-3.5 text-[var(--primary)]" />
+              <span>Live Interface Preview</span>
+            </label>
+            <span className="text-[10px] text-[var(--primary)] font-bold bg-[var(--primary)]/10 px-2 py-0.5 rounded-full border border-[var(--primary)]/20">
+              Real-time Design Tokens
+            </span>
+          </div>
+
+          <div className="p-4 rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-xs space-y-3">
+            {/* Miniature Layout Container */}
+            <div className="flex h-56 rounded-lg overflow-hidden border border-[var(--border)] bg-[var(--background)] shadow-inner">
+              
+              {/* Miniature Sidebar */}
+              <div className="w-20 bg-[var(--surface)] border-r border-[var(--border)] p-2 flex flex-col justify-between shrink-0">
+                <div className="space-y-2.5">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-5 h-5 rounded bg-[var(--primary)] flex items-center justify-center text-[9px] font-black text-[var(--primary-foreground)]">
+                      A
+                    </div>
+                    <span className="text-[9px] font-bold text-[var(--text)] truncate">
+                      Academicos
+                    </span>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="px-1.5 py-1 rounded bg-[var(--primary)]/15 border border-[var(--primary)]/30 text-[8px] font-bold text-[var(--primary)] flex items-center gap-1">
+                      <div className="w-1.5 h-1.5 rounded-full bg-[var(--primary)]" />
+                      <span>Dashboard</span>
+                    </div>
+                    <div className="px-1.5 py-1 rounded text-[8px] font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-secondary)] flex items-center gap-1">
+                      <div className="w-1.5 h-1.5 rounded-full bg-[var(--text-secondary)]" />
+                      <span>Planner</span>
+                    </div>
+                    <div className="px-1.5 py-1 rounded text-[8px] font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-secondary)] flex items-center gap-1">
+                      <div className="w-1.5 h-1.5 rounded-full bg-[var(--text-secondary)]" />
+                      <span>CAT Mocks</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="px-1.5 py-1 rounded bg-[var(--surface-secondary)] text-[8px] font-medium text-[var(--text-secondary)]">
+                  ⚙ Settings
+                </div>
+              </div>
+
+              {/* Main Preview Area */}
+              <div className="flex-1 p-3 space-y-3 overflow-hidden bg-[var(--background)] flex flex-col justify-between">
+                
+                {/* Header Strip */}
+                <div className="flex items-center justify-between text-[10px] border-b border-[var(--border)] pb-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-[var(--text)]">Academic Workspace</span>
+                    <span className="text-[8px] px-1.5 py-0.2 rounded bg-[var(--primary)]/15 text-[var(--primary)] font-semibold">
+                      {palette} • {resolvedTheme}
+                    </span>
+                  </div>
+                  <span className="text-[8px] text-[var(--text-secondary)] font-medium">
+                    Today: 3 Tasks Pending
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {/* Miniature Dashboard Card */}
+                  <div className="p-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] space-y-1">
+                    <div className="text-[9px] text-[var(--text-secondary)] font-medium">
+                      Weekly Study Hours
+                    </div>
+                    <div className="text-sm font-bold text-[var(--text)]">28.4 hrs</div>
+                    <div className="text-[8px] text-[var(--primary)] font-semibold">
+                      +15% Target Progress
+                    </div>
+                  </div>
+
+                  {/* Miniature Calendar */}
+                  <div className="p-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] space-y-1">
+                    <div className="text-[9px] text-[var(--text-secondary)] font-medium">
+                      Calendar Schedule
+                    </div>
+                    <div className="grid grid-cols-7 gap-0.5 pt-0.5">
+                      {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day, idx) => (
+                        <div
+                          key={idx}
+                          className={`h-5 rounded text-[8px] flex flex-col items-center justify-center font-bold ${
+                            idx === 2
+                              ? 'bg-[var(--primary)] text-[var(--primary-foreground)]'
+                              : idx === 4
+                              ? 'bg-[var(--calendar-event)] text-[var(--primary)] border border-[var(--primary)]/30'
+                              : 'bg-[var(--surface-secondary)] text-[var(--text)]'
+                          }`}
+                        >
+                          {day}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Miniature Task Card & Progress Bar */}
+                <div className="p-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-3 h-3 rounded border border-[var(--primary)] bg-[var(--primary)]/20 flex items-center justify-center text-[8px] text-[var(--primary)] font-bold">
+                        ✓
+                      </div>
+                      <span className="text-[10px] font-semibold text-[var(--text)] truncate">
+                        CAT Quantitative Aptitude Mock #08
+                      </span>
+                    </div>
+                    <span className="text-[8px] px-1.5 py-0.2 rounded bg-[var(--primary)]/15 text-[var(--primary)] border border-[var(--primary)]/30 font-bold">
+                      High Priority
+                    </span>
+                  </div>
+
+                  {/* Progress Bar */}
+                  <div className="space-y-0.5">
+                    <div className="flex justify-between text-[8px]">
+                      <span className="text-[var(--text-secondary)]">Mock Progress</span>
+                      <span className="font-bold text-[var(--primary)]">85% Completed</span>
+                    </div>
+                    <div className="w-full h-1.5 rounded-full bg-[var(--surface-secondary)] overflow-hidden">
+                      <div
+                        className="h-full bg-[var(--primary)] rounded-full transition-all duration-300"
+                        style={{ width: '85%' }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Miniature Buttons */}
+                <div className="flex items-center gap-2 pt-1 border-t border-[var(--border)]">
+                  <button
+                    type="button"
+                    className="px-3 py-1 rounded-md text-[10px] font-bold bg-[var(--primary)] text-[var(--primary-foreground)] hover:bg-[var(--primary-hover)] shadow-xs transition-all"
+                  >
+                    Primary Button
+                  </button>
+                  <button
+                    type="button"
+                    className="px-3 py-1 rounded-md text-[10px] font-semibold bg-[var(--surface-secondary)] text-[var(--text)] border border-[var(--border)] hover:border-[var(--text-secondary)] transition-all"
+                  >
+                    Secondary Button
+                  </button>
+                </div>
+
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* User & Exam Profile Form */}

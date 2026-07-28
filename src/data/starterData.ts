@@ -17,6 +17,12 @@ export const STARTER_PROGRAMS: Program[] = [];
 export const STARTER_SETTINGS: UserSettings = {
   userName: 'User',
   defaultTheme: 'dark',
+  themeMode: 'midnight',
+  accentColor: 'cyan',
+  appearance: {
+    mode: 'system',
+    palette: 'ocean',
+  },
   weeklyStartDay: 'Monday',
   weeklyStudyTargets: {},
   catMockTarget: 20,

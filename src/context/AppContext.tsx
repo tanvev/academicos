@@ -450,6 +450,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, [currentUser?.uid]);
 
+  // Synchronize Appearance system (Theme Mode & Accent Color) with DOM attributes
+  useEffect(() => {
+    const themeMode = settings?.themeMode || 'midnight';
+    const accentColor = settings?.accentColor || 'cyan';
+    document.documentElement.setAttribute('data-theme', themeMode);
+    document.documentElement.setAttribute('data-accent', accentColor);
+  }, [settings?.themeMode, settings?.accentColor]);
+
   // Keep selectedProgramId in sync with loaded user programs
   useEffect(() => {
     if (programs.length > 0) {

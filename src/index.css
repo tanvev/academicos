@@ -1,7 +1,285 @@
 @import "tailwindcss";
 
+/* ==========================================================================
+   ACADEMICOS DESIGN TOKENS - PALETTES & RESOLVED THEMES
+   Calm, soft, pastel-inspired academic productivity aesthetics
+   ========================================================================== */
+
+/* 1. PALETTE: OCEAN (Default - Soft Cyan & Navy/White) */
+[data-palette="ocean"][data-resolved-theme="dark"],
+:root:not([data-palette]) {
+  --background: #090e1a;
+  --surface: #10192e;
+  --surface-secondary: #182542;
+  --card: #121d36;
+  --border: #1e2e52;
+  --text: #f8fafc;
+  --text-secondary: #94a3b8;
+  --primary: #38bdf8;
+  --primary-hover: #0284c7;
+  --primary-foreground: #090e1a;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --calendar-event: rgba(56, 189, 248, 0.16);
+  --calendar-selected: #38bdf8;
+  --shadow: rgba(0, 0, 0, 0.35);
+  color-scheme: dark;
+}
+
+/* Light Mode: Crisp white background, soft cyan / sky primary */
+[data-palette="ocean"][data-resolved-theme="light"] {
+  --background: #f8fafc;
+  --surface: #ffffff;
+  --surface-secondary: #f1f5f9;
+  --card: #ffffff;
+  --border: #e2e8f0;
+  --text: #0f172a;
+  --text-secondary: #475569;
+  --primary: #0284c7;
+  --primary-hover: #0369a1;
+  --primary-foreground: #ffffff;
+  --success: #059669;
+  --warning: #d97706;
+  --danger: #dc2626;
+  --calendar-event: rgba(2, 132, 199, 0.10);
+  --calendar-selected: #0284c7;
+  --shadow: rgba(15, 23, 42, 0.05);
+  color-scheme: light;
+}
+
+/* 2. PALETTE: BLOSSOM (Dusty Rose & Soft Pink/Blush) */
+[data-palette="blossom"][data-resolved-theme="dark"] {
+  --background: #141316;
+  --surface: #1f1d24;
+  --surface-secondary: #2c2933;
+  --card: #221f28;
+  --border: #383342;
+  --text: #faf5f8;
+  --text-secondary: #a89fa8;
+  --primary: #f43f5e;
+  --primary-hover: #e11d48;
+  --primary-foreground: #ffffff;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --calendar-event: rgba(244, 63, 94, 0.16);
+  --calendar-selected: #f43f5e;
+  --shadow: rgba(0, 0, 0, 0.35);
+  color-scheme: dark;
+}
+
+/* Light Mode: Soft blush background, soft rose accents */
+[data-palette="blossom"][data-resolved-theme="light"] {
+  --background: #fdf2f8;
+  --surface: #ffffff;
+  --surface-secondary: #fce7f3;
+  --card: #ffffff;
+  --border: #fbcfe8;
+  --text: #4c0519;
+  --text-secondary: #881337;
+  --primary: #e11d48;
+  --primary-hover: #be123c;
+  --primary-foreground: #ffffff;
+  --success: #059669;
+  --warning: #d97706;
+  --danger: #dc2626;
+  --calendar-event: rgba(225, 29, 72, 0.10);
+  --calendar-selected: #e11d48;
+  --shadow: rgba(136, 19, 55, 0.05);
+  color-scheme: light;
+}
+
+/* 3. PALETTE: SUNSET (Warm Coral & Plum/Cream) */
+[data-palette="sunset"][data-resolved-theme="dark"] {
+  --background: #170d18;
+  --surface: #241426;
+  --surface-secondary: #331d36;
+  --card: #271629;
+  --border: #422647;
+  --text: #fdf4ff;
+  --text-secondary: #c0a5c4;
+  --primary: #fb923c;
+  --primary-hover: #f97316;
+  --primary-foreground: #170d18;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --calendar-event: rgba(251, 146, 60, 0.16);
+  --calendar-selected: #fb923c;
+  --shadow: rgba(0, 0, 0, 0.35);
+  color-scheme: dark;
+}
+
+/* Light Mode: Warm cream background, soft orange coral accents */
+[data-palette="sunset"][data-resolved-theme="light"] {
+  --background: #fffbeb;
+  --surface: #ffffff;
+  --surface-secondary: #fef3c7;
+  --card: #ffffff;
+  --border: #fde68a;
+  --text: #451a03;
+  --text-secondary: #78350f;
+  --primary: #ea580c;
+  --primary-hover: #c2410c;
+  --primary-foreground: #ffffff;
+  --success: #059669;
+  --warning: #d97706;
+  --danger: #dc2626;
+  --calendar-event: rgba(234, 88, 12, 0.10);
+  --calendar-selected: #ea580c;
+  --shadow: rgba(120, 53, 15, 0.05);
+  color-scheme: light;
+}
+
+/* ==========================================================================
+   SMOOTH THEME TRANSITIONS (200-300ms)
+   ========================================================================== */
+html, body, header, aside, main, section, nav, button, input, select, textarea, a, span, table, tr, td, th, div {
+  transition: background-color 250ms ease,
+              border-color 250ms ease,
+              color 250ms ease,
+              fill 250ms ease,
+              stroke 250ms ease,
+              box-shadow 250ms ease;
+}
+
+/* Base Body Application */
+body {
+  background-color: var(--background);
+  color: var(--text);
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+/* ==========================================================================
+   DYNAMIC TOKEN UTILITY MAPPINGS (FULL PROPAGATION)
+   ========================================================================== */
+
+/* 1. App Background Overrides */
+.bg-app,
+.bg-\[\#09090B\], .bg-\[\#09090b\],
+.bg-zinc-950, .bg-slate-950,
+.bg-\[\#0d0d10\], .bg-\[\#121215\], .bg-black\/80 {
+  background-color: var(--background) !important;
+}
+
+/* 2. Surface & Card Container Overrides */
+.bg-surface,
+.bg-\[\#18181B\], .bg-\[\#18181b\],
+.bg-zinc-900, .bg-slate-900,
+.bg-\[\#131316\], .bg-\[\#1f1f23\], .bg-\[\#1c1c20\] {
+  background-color: var(--surface) !important;
+}
+
+/* 3. Secondary Surface & Hover Backgrounds */
+.bg-surface-secondary,
+.bg-\[\#27272A\], .bg-\[\#27272a\],
+.bg-zinc-800, .bg-slate-800,
+.bg-\[\#222226\], .bg-slate-900\/50, .bg-zinc-900\/80 {
+  background-color: var(--surface-secondary) !important;
+}
+
+/* 4. Borders & Dividers */
+.border-theme,
+.border-\[\#27272A\], .border-\[\#27272a\],
+.border-zinc-800, .border-slate-800,
+.border-zinc-700, .border-slate-700,
+.border-\[\#3F3F46\], .border-\[\#3f3f46\],
+.border-slate-800\/80, .border-zinc-800\/80 {
+  border-color: var(--border) !important;
+}
+
+/* 5. Typography */
+.text-white, .text-zinc-100, .text-slate-100 {
+  color: var(--text) !important;
+}
+
+.text-slate-200, .text-slate-300, .text-slate-400,
+.text-zinc-200, .text-zinc-300, .text-zinc-400,
+.text-slate-500, .text-zinc-500 {
+  color: var(--text-secondary) !important;
+}
+
+/* 6. PRIMARY ACCENTS & BUTTONS (Teal / Cyan / Purple Primary Action Mapping) */
+.bg-teal-500, .bg-teal-400, .bg-teal-600,
+.bg-cyan-500, .bg-cyan-400, .bg-cyan-600,
+.bg-purple-500, .bg-purple-400, .bg-purple-600 {
+  background-color: var(--primary) !important;
+  color: var(--primary-foreground) !important;
+}
+
+.hover\:bg-teal-400:hover, .hover\:bg-teal-500:hover, .hover\:bg-teal-600:hover,
+.hover\:bg-cyan-400:hover, .hover\:bg-cyan-500:hover, .hover\:bg-cyan-600:hover,
+.hover\:bg-purple-400:hover, .hover\:bg-purple-500:hover, .hover\:bg-purple-600:hover {
+  background-color: var(--primary-hover) !important;
+  color: var(--primary-foreground) !important;
+}
+
+/* Accent Text */
+.text-teal-300, .text-teal-400, .text-teal-500, .text-teal-600,
+.text-cyan-300, .text-cyan-400, .text-cyan-500, .text-cyan-600,
+.text-purple-300, .text-purple-400, .text-purple-500 {
+  color: var(--primary) !important;
+}
+
+.hover\:text-teal-400:hover, .hover\:text-teal-300:hover,
+.hover\:text-cyan-400:hover, .hover\:text-cyan-300:hover,
+.hover\:text-purple-300:hover {
+  color: var(--primary-hover) !important;
+}
+
+/* Accent Soft Background Highlights (Pills, Badges, Selected Calendar Days) */
+.bg-teal-500\/10, .bg-teal-500\/20, .bg-teal-500\/30, .bg-teal-400\/10, .bg-teal-400\/20,
+.bg-cyan-500\/10, .bg-cyan-500\/20, .bg-cyan-500\/30, .bg-cyan-400\/10, .bg-cyan-400\/20,
+.bg-purple-500\/10, .bg-purple-500\/20, .bg-purple-500\/30, .bg-purple-950\/20, .bg-purple-950\/40, .bg-purple-950\/60 {
+  background-color: var(--calendar-event) !important;
+}
+
+/* Accent Borders */
+.border-teal-500, .border-teal-400, .border-teal-600,
+.border-teal-500\/20, .border-teal-500\/30, .border-teal-500\/40,
+.border-cyan-500, .border-cyan-400, .border-cyan-600,
+.border-cyan-500\/20, .border-cyan-500\/30, .border-cyan-500\/40,
+.border-purple-500, .border-purple-400, .border-purple-500\/30, .border-purple-500\/40, .border-purple-500\/60 {
+  border-color: var(--primary) !important;
+}
+
+/* Focus Rings */
+.focus\:border-cyan-500:focus, .focus-within\:border-cyan-500:focus-within,
+.focus\:border-teal-500:focus, .focus-within\:border-teal-500:focus-within,
+.focus\:ring-cyan-500:focus, .focus\:ring-teal-500:focus, .ring-cyan-500, .ring-teal-500, .ring-purple-500 {
+  --tw-ring-color: var(--primary) !important;
+  border-color: var(--primary) !important;
+}
+
+/* SVGs & Icons */
+.stroke-teal-400, .stroke-teal-500, .stroke-cyan-400, .stroke-cyan-500, .stroke-purple-400 {
+  stroke: var(--primary) !important;
+}
+
+.fill-teal-400, .fill-teal-500, .fill-cyan-400, .fill-cyan-500, .fill-purple-400 {
+  fill: var(--primary) !important;
+}
+
+/* Gradients & Shadows */
+.from-teal-500, .from-cyan-500, .from-purple-500 {
+  --tw-gradient-from: var(--primary) !important;
+  --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-from) 0%, var(--tw-gradient-to) 100%) !important;
+}
+
+.to-teal-400, .to-cyan-400, .to-purple-400 {
+  --tw-gradient-to: var(--primary-hover) !important;
+}
+
+.shadow-teal-500\/20, .shadow-cyan-500\/20, .shadow-cyan-500\/10, .shadow-purple-500\/20 {
+  --tw-shadow-color: var(--primary) !important;
+}
+
+.accent-teal-500, .accent-cyan-500 {
+  accent-color: var(--primary) !important;
+}
+
 @layer utilities {
-  /* Custom thin dark scrollbar */
   .custom-scrollbar::-webkit-scrollbar {
     width: 6px;
     height: 6px;
@@ -10,10 +288,10 @@
     background: transparent;
   }
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: #27272a;
+    background: var(--border);
     border-radius: 9999px;
   }
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: #3f3f46;
+    background: var(--surface-secondary);
   }
 }
