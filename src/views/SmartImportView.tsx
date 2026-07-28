@@ -281,9 +281,9 @@ export const SmartImportView: React.FC = () => {
         setCurrentView('cat_sectionals');
       }
     } else if (dt === 'Syllabus' && Array.isArray(pd.topics)) {
-      const prog = programs.find((p) => p.id === 'prog-cat-2026') || programs[0];
+      const targetProgId = (programs.find((p) => p.id === 'prog-cat-2026') || programs[0])?.id || 'prog-cat-2026';
       const newTopics = pd.topics.map((tName: string, idx: number) => ({
-        programId: prog.id,
+        programId: targetProgId,
         subjectId: 'subj-cat-qa',
         name: tName,
         status: 'not_started' as any,
@@ -297,11 +297,11 @@ export const SmartImportView: React.FC = () => {
       alert(`Imported ${newTopics.length} syllabus topics!`);
       setCurrentView('cat_syllabus');
     } else if ((dt === 'Timetable' || dt === 'Academic Calendar' || dt === 'Exam Schedule') && Array.isArray(pd.events)) {
-      const prog = programs.find((p) => p.id === 'prog-cat-2026') || programs[0];
+      const targetProgId = (programs.find((p) => p.id === 'prog-cat-2026') || programs[0])?.id || 'prog-cat-2026';
       pd.events.forEach((evt: any) => {
         addTask({
           title: evt.title || 'Scheduled Event',
-          programId: prog.id,
+          programId: targetProgId,
           type: evt.type === 'exam' ? 'exam' : 'deadline',
           dueDate: evt.date || new Date().toISOString().split('T')[0],
           dueTime: evt.startTime || undefined,

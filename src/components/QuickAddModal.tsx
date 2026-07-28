@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { X, CheckSquare, Clock, Award, FileCheck, Target } from 'lucide-react';
 import { TaskType, TaskPriority, ProgramType } from '../types';
@@ -65,6 +65,17 @@ export const QuickAddModal: React.FC = () => {
   const [progName, setProgName] = useState('');
   const [progType, setProgType] = useState<ProgramType>('competitive_exam');
   const [progTargetDate, setProgTargetDate] = useState('2026-11-29');
+
+  useEffect(() => {
+    if (programs.length > 0) {
+      if (!taskProgId || !programs.some((p) => p.id === taskProgId)) {
+        setTaskProgId(programs[0].id);
+      }
+      if (!studyProgId || !programs.some((p) => p.id === studyProgId)) {
+        setStudyProgId(programs[0].id);
+      }
+    }
+  }, [programs, taskProgId, studyProgId]);
 
   if (!isQuickAddOpen) return null;
 

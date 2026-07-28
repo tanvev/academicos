@@ -64,7 +64,18 @@ export const TasksView: React.FC = () => {
   // Calendar Date Navigation (Offset in weeks)
   const [weekOffset, setWeekOffset] = useState(0);
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const formatLocalDate = (d: Date): string => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const todayStr = formatLocalDate(new Date());
+
+  React.useEffect(() => {
+    console.log('Loaded catMocks', catMocks);
+  }, [catMocks]);
 
   // Helper to determine missed mocks
   const getMockStatus = (m: CATMock | CATSectional): 'scheduled' | 'completed' | 'missed' | 'rescheduled' => {
@@ -109,7 +120,7 @@ export const TasksView: React.FC = () => {
   for (let i = 0; i < 28; i++) {
     const d = new Date(startDate);
     d.setDate(d.getDate() + i);
-    const dStr = d.toISOString().split('T')[0];
+    const dStr = formatLocalDate(d);
     calendarDays.push({
       dateStr: dStr,
       dateObj: d,
@@ -249,6 +260,22 @@ export const TasksView: React.FC = () => {
 
     return items;
   };
+
+  // Generate all calendar events map
+  const calendarEventsMap = React.useMemo(() => {
+    const map: Record<string, CalendarEventItem[]> = {};
+    calendarDays.forEach((day) => {
+      map[day.dateStr] = getItemsForDate(day.dateStr);
+    });
+    console.log('Generated calendar events', map);
+    return map;
+  }, [calendarDays, catMocks, catSectionals, tasks, studySessions, calendarFilter, programFilter]);
+
+  React.useEffect(() => {
+    if (viewMode === 'calendar') {
+      console.log('Rendered calendar events', calendarEventsMap);
+    }
+  }, [viewMode, calendarEventsMap]);
 
   return (
     <div className="space-y-6 pb-12">
@@ -407,7 +434,7 @@ export const TasksView: React.FC = () => {
             ))}
 
             {calendarDays.map(({ dateStr, dateObj, isToday }) => {
-              const dayItems = getItemsForDate(dateStr);
+              const dayItems = calendarEventsMap[dateStr] || [];
 
               return (
                 <div

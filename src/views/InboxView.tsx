@@ -27,13 +27,14 @@ export const InboxView: React.FC = () => {
 
       const json = await response.json();
 
+      const targetProgId = (programs.find((p) => p.id === 'prog-cat-2026') || programs[0])?.id || 'prog-cat-2026';
+
       if (json.success && json.data) {
         const d = json.data;
-        const catProg = programs.find((p) => p.id === 'prog-cat-2026') || programs[0];
 
         addTask({
           title: d.title || text,
-          programId: catProg.id,
+          programId: targetProgId,
           type: d.type || 'study',
           dueDate: d.dueDate || new Date().toISOString().split('T')[0],
           priority: d.priority || 'medium',
@@ -44,10 +45,9 @@ export const InboxView: React.FC = () => {
         alert('Converted to Task successfully!');
       } else {
         // Fallback simple task creation
-        const catProg = programs.find((p) => p.id === 'prog-cat-2026') || programs[0];
         addTask({
           title: text,
-          programId: catProg.id,
+          programId: targetProgId,
           type: 'study',
           dueDate: new Date().toISOString().split('T')[0],
           priority: 'medium',
@@ -57,10 +57,10 @@ export const InboxView: React.FC = () => {
       }
     } catch (e) {
       // Fallback simple task creation
-      const catProg = programs.find((p) => p.id === 'prog-cat-2026') || programs[0];
+      const targetProgId = (programs.find((p) => p.id === 'prog-cat-2026') || programs[0])?.id || 'prog-cat-2026';
       addTask({
         title: text,
-        programId: catProg.id,
+        programId: targetProgId,
         type: 'study',
         dueDate: new Date().toISOString().split('T')[0],
         priority: 'medium',
