@@ -363,7 +363,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             };
             const initialSettings = { ...STARTER_SETTINGS, userName: userProfile.name };
             setSettings(initialSettings);
-            await setDoc(userRef, { ...userProfile, settings: initialSettings }, { merge: true });
+            const userDocData = sanitizeFirestoreData({ ...userProfile, settings: initialSettings });
+            console.log("FINAL FIRESTORE DOCUMENT", userDocData);
+            await setDoc(userRef, userDocData, { merge: true });
           }
 
           setCurrentUser(userProfile);
@@ -527,7 +529,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           createdAt: new Date().toISOString(),
           onboardingCompleted: true,
         };
-        await setDoc(doc(db, 'users', cred.user.uid), userProfile, { merge: true });
+        const userDocData = sanitizeFirestoreData(userProfile);
+        console.log("FINAL FIRESTORE DOCUMENT", userDocData);
+        await setDoc(doc(db, 'users', cred.user.uid), userDocData, { merge: true });
         setCurrentUser(userProfile);
         setCurrentView('dashboard');
         return { success: true };
@@ -592,7 +596,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       interests,
     };
     setCurrentUser(updatedUser);
-    await setDoc(doc(db, 'users', currentUser.uid), { onboardingCompleted: true, interests }, { merge: true });
+    const onboardingDocData = sanitizeFirestoreData({ onboardingCompleted: true, interests });
+    console.log("FINAL FIRESTORE DOCUMENT", onboardingDocData);
+    await setDoc(doc(db, 'users', currentUser.uid), onboardingDocData, { merge: true });
     setCurrentView('dashboard');
   };
 
@@ -713,6 +719,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         recurrenceDays: data.recurrenceDays || [],
       };
       const newM = sanitizeFirestoreData(rawM);
+      console.log("FINAL FIRESTORE DOCUMENT", newM);
       setDoc(doc(db, 'users', activeUid, 'catMocks', id), newM).catch((err) =>
         handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/catMocks/${id}`)
       );
@@ -746,6 +753,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         recurrenceDays: data.recurrenceDays || [],
       };
       const newS = sanitizeFirestoreData(rawS);
+      console.log("FINAL FIRESTORE DOCUMENT", newS);
       setDoc(doc(db, 'users', activeUid, 'catSectionals', id), newS).catch((err) =>
         handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/catSectionals/${id}`)
       );
@@ -762,6 +770,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const subcoll = type === 'mock' ? 'catMocks' : 'catSectionals';
     const docRef = doc(db, 'users', activeUid, subcoll, id);
     const cleanedResult = sanitizeFirestoreData({ ...result, status: 'completed' as const });
+    console.log("FINAL FIRESTORE DOCUMENT", cleanedResult);
     updateDoc(docRef, cleanedResult).catch((err) =>
       handleFirestoreError(err, OperationType.UPDATE, `users/${activeUid}/${subcoll}/${id}`)
     );
@@ -860,7 +869,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: todayStr,
     };
 
-    setDoc(doc(db, 'users', activeUid, 'studySessions', id), newSession).catch((err) =>
+    const cleanedSession = sanitizeFirestoreData(newSession);
+    console.log("FINAL FIRESTORE DOCUMENT", cleanedSession);
+    setDoc(doc(db, 'users', activeUid, 'studySessions', id), cleanedSession).catch((err) =>
       handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/studySessions/${id}`)
     );
 
@@ -868,11 +879,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const topicRef = doc(db, 'users', activeUid, 'topics', studyTimer.topicId);
       const existing = topics.find((t) => t.id === studyTimer.topicId);
       if (existing) {
-        updateDoc(topicRef, {
+        const topicUpdate = sanitizeFirestoreData({
           totalStudyTimeMinutes: (existing.totalStudyTimeMinutes || 0) + durationMins,
           lastStudied: new Date().toISOString(),
           status: updatedTopicStatus || existing.status,
-        }).catch((err) =>
+        });
+        console.log("FINAL FIRESTORE DOCUMENT", topicUpdate);
+        updateDoc(topicRef, topicUpdate).catch((err) =>
           handleFirestoreError(err, OperationType.UPDATE, `users/${activeUid}/topics/${studyTimer.topicId}`)
         );
       }
@@ -909,7 +922,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updatedAt: new Date().toISOString(),
     };
 
-    setDoc(doc(db, 'users', activeUid, 'dailyCheckIns', id), newRecord).catch((err) =>
+    const cleanedRecord = sanitizeFirestoreData(newRecord);
+    console.log("FINAL FIRESTORE DOCUMENT", cleanedRecord);
+    setDoc(doc(db, 'users', activeUid, 'dailyCheckIns', id), cleanedRecord).catch((err) =>
       handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/dailyCheckIns/${id}`)
     );
 
@@ -936,7 +951,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    setDoc(doc(db, 'users', activeUid, 'dailyCheckIns', id), record).catch((err) =>
+    const cleanedRecord = sanitizeFirestoreData(record);
+    console.log("FINAL FIRESTORE DOCUMENT", cleanedRecord);
+    setDoc(doc(db, 'users', activeUid, 'dailyCheckIns', id), cleanedRecord).catch((err) =>
       handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/dailyCheckIns/${id}`)
     );
   };
@@ -945,14 +962,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addProgram = (p: Omit<Program, 'id'>) => {
     if (!activeUid) return;
     const id = `prog-${Date.now()}`;
-    setDoc(doc(db, 'users', activeUid, 'programs', id), { ...p, id, userId: activeUid }).catch((err) =>
+    const cleaned = sanitizeFirestoreData({ ...p, id, userId: activeUid });
+    console.log("FINAL FIRESTORE DOCUMENT", cleaned);
+    setDoc(doc(db, 'users', activeUid, 'programs', id), cleaned).catch((err) =>
       handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/programs/${id}`)
     );
   };
 
   const updateProgram = (id: string, p: Partial<Program>) => {
     if (!activeUid) return;
-    updateDoc(doc(db, 'users', activeUid, 'programs', id), p).catch((err) =>
+    const cleaned = sanitizeFirestoreData(p);
+    console.log("FINAL FIRESTORE DOCUMENT", cleaned);
+    updateDoc(doc(db, 'users', activeUid, 'programs', id), cleaned).catch((err) =>
       handleFirestoreError(err, OperationType.UPDATE, `users/${activeUid}/programs/${id}`)
     );
   };
@@ -967,14 +988,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addSubject = (s: Omit<Subject, 'id'>) => {
     if (!activeUid) return;
     const id = `subj-${Date.now()}`;
-    setDoc(doc(db, 'users', activeUid, 'subjects', id), { ...s, id, userId: activeUid }).catch((err) =>
+    const cleaned = sanitizeFirestoreData({ ...s, id, userId: activeUid });
+    console.log("FINAL FIRESTORE DOCUMENT", cleaned);
+    setDoc(doc(db, 'users', activeUid, 'subjects', id), cleaned).catch((err) =>
       handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/subjects/${id}`)
     );
   };
 
   const updateSubject = (id: string, s: Partial<Subject>) => {
     if (!activeUid) return;
-    updateDoc(doc(db, 'users', activeUid, 'subjects', id), s).catch((err) =>
+    const cleaned = sanitizeFirestoreData(s);
+    console.log("FINAL FIRESTORE DOCUMENT", cleaned);
+    updateDoc(doc(db, 'users', activeUid, 'subjects', id), cleaned).catch((err) =>
       handleFirestoreError(err, OperationType.UPDATE, `users/${activeUid}/subjects/${id}`)
     );
   };
@@ -989,7 +1014,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const reorderSubjects = (reordered: Subject[]) => {
     if (!activeUid) return;
     reordered.forEach((subj, index) => {
-      updateDoc(doc(db, 'users', activeUid, 'subjects', subj.id), { order: index }).catch((err) =>
+      const cleaned = sanitizeFirestoreData({ order: index });
+      console.log("FINAL FIRESTORE DOCUMENT", cleaned);
+      updateDoc(doc(db, 'users', activeUid, 'subjects', subj.id), cleaned).catch((err) =>
         handleFirestoreError(err, OperationType.UPDATE, `users/${activeUid}/subjects/${subj.id}`)
       );
     });
@@ -998,14 +1025,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addModule = (m: Omit<Module, 'id'>) => {
     if (!activeUid) return;
     const id = `mod-${Date.now()}`;
-    setDoc(doc(db, 'users', activeUid, 'modules', id), { ...m, id, userId: activeUid }).catch((err) =>
+    const cleaned = sanitizeFirestoreData({ ...m, id, userId: activeUid });
+    console.log("FINAL FIRESTORE DOCUMENT", cleaned);
+    setDoc(doc(db, 'users', activeUid, 'modules', id), cleaned).catch((err) =>
       handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/modules/${id}`)
     );
   };
 
   const updateModule = (id: string, m: Partial<Module>) => {
     if (!activeUid) return;
-    updateDoc(doc(db, 'users', activeUid, 'modules', id), m).catch((err) =>
+    const cleaned = sanitizeFirestoreData(m);
+    console.log("FINAL FIRESTORE DOCUMENT", cleaned);
+    updateDoc(doc(db, 'users', activeUid, 'modules', id), cleaned).catch((err) =>
       handleFirestoreError(err, OperationType.UPDATE, `users/${activeUid}/modules/${id}`)
     );
   };
@@ -1020,7 +1051,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addTopic = (t: Omit<Topic, 'id'>) => {
     if (!activeUid) return;
     const id = `top-${Date.now()}`;
-    setDoc(doc(db, 'users', activeUid, 'topics', id), { ...t, id, userId: activeUid }).catch((err) =>
+    const cleaned = sanitizeFirestoreData({ ...t, id, userId: activeUid });
+    console.log("FINAL FIRESTORE DOCUMENT", cleaned);
+    setDoc(doc(db, 'users', activeUid, 'topics', id), cleaned).catch((err) =>
       handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/topics/${id}`)
     );
   };
@@ -1029,7 +1062,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!activeUid) return;
     newTopics.forEach((t) => {
       const id = `top-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
-      setDoc(doc(db, 'users', activeUid, 'topics', id), { ...t, id, userId: activeUid }).catch((err) =>
+      const cleaned = sanitizeFirestoreData({ ...t, id, userId: activeUid });
+      console.log("FINAL FIRESTORE DOCUMENT", cleaned);
+      setDoc(doc(db, 'users', activeUid, 'topics', id), cleaned).catch((err) =>
         handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/topics/${id}`)
       );
     });
@@ -1037,17 +1072,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateTopic = (id: string, t: Partial<Topic>) => {
     if (!activeUid) return;
-    updateDoc(doc(db, 'users', activeUid, 'topics', id), t).catch((err) =>
+    const cleaned = sanitizeFirestoreData(t);
+    console.log("FINAL FIRESTORE DOCUMENT", cleaned);
+    updateDoc(doc(db, 'users', activeUid, 'topics', id), cleaned).catch((err) =>
       handleFirestoreError(err, OperationType.UPDATE, `users/${activeUid}/topics/${id}`)
     );
   };
 
   const updateTopicStatus = (id: string, status: TopicStatus) => {
     if (!activeUid) return;
-    updateDoc(doc(db, 'users', activeUid, 'topics', id), {
+    const cleaned = sanitizeFirestoreData({
       status,
       lastStudied: new Date().toISOString(),
-    }).catch((err) => handleFirestoreError(err, OperationType.UPDATE, `users/${activeUid}/topics/${id}`));
+    });
+    console.log("FINAL FIRESTORE DOCUMENT", cleaned);
+    updateDoc(doc(db, 'users', activeUid, 'topics', id), cleaned).catch((err) =>
+      handleFirestoreError(err, OperationType.UPDATE, `users/${activeUid}/topics/${id}`)
+    );
   };
 
   const deleteTopic = (id: string) => {
@@ -1066,14 +1107,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       userId: activeUid,
       createdAt: new Date().toISOString(),
     };
-    setDoc(doc(db, 'users', activeUid, 'tasks', id), newTask).catch((err) =>
+    const cleaned = sanitizeFirestoreData(newTask);
+    console.log("FINAL FIRESTORE DOCUMENT", cleaned);
+    setDoc(doc(db, 'users', activeUid, 'tasks', id), cleaned).catch((err) =>
       handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/tasks/${id}`)
     );
   };
 
   const updateTask = (id: string, task: Partial<Task>) => {
     if (!activeUid) return;
-    updateDoc(doc(db, 'users', activeUid, 'tasks', id), task).catch((err) =>
+    const cleaned = sanitizeFirestoreData(task);
+    console.log("FINAL FIRESTORE DOCUMENT", cleaned);
+    updateDoc(doc(db, 'users', activeUid, 'tasks', id), cleaned).catch((err) =>
       handleFirestoreError(err, OperationType.UPDATE, `users/${activeUid}/tasks/${id}`)
     );
   };
@@ -1086,10 +1131,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const targetDate = dateOverride || todayStr;
     const newStatus: TaskStatus = task.status === 'completed' ? 'pending' : 'completed';
 
-    updateDoc(doc(db, 'users', activeUid, 'tasks', id), {
+    const cleanedTaskUpdate = sanitizeFirestoreData({
       status: newStatus,
       completedAt: newStatus === 'completed' ? new Date().toISOString() : null,
-    }).catch((err) => handleFirestoreError(err, OperationType.UPDATE, `users/${activeUid}/tasks/${id}`));
+    });
+    console.log("FINAL FIRESTORE DOCUMENT", cleanedTaskUpdate);
+    updateDoc(doc(db, 'users', activeUid, 'tasks', id), cleanedTaskUpdate).catch((err) =>
+      handleFirestoreError(err, OperationType.UPDATE, `users/${activeUid}/tasks/${id}`)
+    );
 
     if (newStatus === 'completed') {
       const completionId = `tc-${id}-${targetDate}`;
@@ -1101,7 +1150,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         status: 'completed',
         completedAt: new Date().toISOString(),
       };
-      setDoc(doc(db, 'users', activeUid, 'taskCompletions', completionId), tc).catch((err) =>
+      const cleanedTc = sanitizeFirestoreData(tc);
+      console.log("FINAL FIRESTORE DOCUMENT", cleanedTc);
+      setDoc(doc(db, 'users', activeUid, 'taskCompletions', completionId), cleanedTc).catch((err) =>
         handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/taskCompletions/${completionId}`)
       );
     }
@@ -1119,14 +1170,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       status: 'skipped',
       completedAt: new Date().toISOString(),
     };
-    setDoc(doc(db, 'users', activeUid, 'taskCompletions', completionId), tc).catch((err) =>
+    const cleanedTc = sanitizeFirestoreData(tc);
+    console.log("FINAL FIRESTORE DOCUMENT", cleanedTc);
+    setDoc(doc(db, 'users', activeUid, 'taskCompletions', completionId), cleanedTc).catch((err) =>
       handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/taskCompletions/${completionId}`)
     );
   };
 
   const pauseTask = (id: string, isPaused: boolean = true) => {
     if (!activeUid) return;
-    updateDoc(doc(db, 'users', activeUid, 'tasks', id), { isPaused }).catch((err) =>
+    const cleanedPause = sanitizeFirestoreData({ isPaused });
+    console.log("FINAL FIRESTORE DOCUMENT", cleanedPause);
+    updateDoc(doc(db, 'users', activeUid, 'tasks', id), cleanedPause).catch((err) =>
       handleFirestoreError(err, OperationType.UPDATE, `users/${activeUid}/tasks/${id}`)
     );
   };
@@ -1147,7 +1202,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       userId: activeUid,
       createdAt: new Date().toISOString(),
     };
-    setDoc(doc(db, 'users', activeUid, 'studySessions', id), newSession).catch((err) =>
+    const cleaned = sanitizeFirestoreData(newSession);
+    console.log("FINAL FIRESTORE DOCUMENT", cleaned);
+    setDoc(doc(db, 'users', activeUid, 'studySessions', id), cleaned).catch((err) =>
       handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/studySessions/${id}`)
     );
   };
@@ -1163,6 +1220,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!activeUid) return;
     const id = `mock-${Date.now()}`;
     const cleaned = sanitizeFirestoreData({ ...mock, id, userId: activeUid });
+    console.log("FINAL FIRESTORE DOCUMENT", cleaned);
     setDoc(doc(db, 'users', activeUid, 'catMocks', id), cleaned).catch((err) =>
       handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/catMocks/${id}`)
     );
@@ -1171,6 +1229,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateCATMock = (id: string, mock: Partial<CATMock>) => {
     if (!activeUid) return;
     const cleaned = sanitizeFirestoreData(mock);
+    console.log("FINAL FIRESTORE DOCUMENT", cleaned);
     updateDoc(doc(db, 'users', activeUid, 'catMocks', id), cleaned).catch((err) =>
       handleFirestoreError(err, OperationType.UPDATE, `users/${activeUid}/catMocks/${id}`)
     );
@@ -1187,6 +1246,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!activeUid) return;
     const id = `sec-${Date.now()}`;
     const cleaned = sanitizeFirestoreData({ ...sec, id, userId: activeUid });
+    console.log("FINAL FIRESTORE DOCUMENT", cleaned);
     setDoc(doc(db, 'users', activeUid, 'catSectionals', id), cleaned).catch((err) =>
       handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/catSectionals/${id}`)
     );
@@ -1195,6 +1255,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateCATSectional = (id: string, sec: Partial<CATSectional>) => {
     if (!activeUid) return;
     const cleaned = sanitizeFirestoreData(sec);
+    console.log("FINAL FIRESTORE DOCUMENT", cleaned);
     updateDoc(doc(db, 'users', activeUid, 'catSectionals', id), cleaned).catch((err) =>
       handleFirestoreError(err, OperationType.UPDATE, `users/${activeUid}/catSectionals/${id}`)
     );
@@ -1216,14 +1277,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       userId: activeUid,
       createdAt: new Date().toISOString(),
     };
-    setDoc(doc(db, 'users', activeUid, 'mistakes', id), newMistake).catch((err) =>
+    const cleaned = sanitizeFirestoreData(newMistake);
+    console.log("FINAL FIRESTORE DOCUMENT", cleaned);
+    setDoc(doc(db, 'users', activeUid, 'mistakes', id), cleaned).catch((err) =>
       handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/mistakes/${id}`)
     );
   };
 
   const updateMistake = (id: string, mistake: Partial<Mistake>) => {
     if (!activeUid) return;
-    updateDoc(doc(db, 'users', activeUid, 'mistakes', id), mistake).catch((err) =>
+    const cleaned = sanitizeFirestoreData(mistake);
+    console.log("FINAL FIRESTORE DOCUMENT", cleaned);
+    updateDoc(doc(db, 'users', activeUid, 'mistakes', id), cleaned).catch((err) =>
       handleFirestoreError(err, OperationType.UPDATE, `users/${activeUid}/mistakes/${id}`)
     );
   };
@@ -1232,7 +1297,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!activeUid) return;
     const target = mistakes.find((m) => m.id === id);
     if (target) {
-      updateDoc(doc(db, 'users', activeUid, 'mistakes', id), { resolved: !target.resolved }).catch((err) =>
+      const cleaned = sanitizeFirestoreData({ resolved: !target.resolved });
+      console.log("FINAL FIRESTORE DOCUMENT", cleaned);
+      updateDoc(doc(db, 'users', activeUid, 'mistakes', id), cleaned).catch((err) =>
         handleFirestoreError(err, OperationType.UPDATE, `users/${activeUid}/mistakes/${id}`)
       );
     }
@@ -1248,12 +1315,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addInboxItem = (text: string) => {
     if (!activeUid) return;
     const id = `inbox-${Date.now()}`;
-    setDoc(doc(db, 'users', activeUid, 'inbox', id), {
+    const cleaned = sanitizeFirestoreData({
       id,
       userId: activeUid,
       text,
       createdAt: new Date().toISOString(),
-    }).catch((err) => handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/inbox/${id}`));
+    });
+    console.log("FINAL FIRESTORE DOCUMENT", cleaned);
+    setDoc(doc(db, 'users', activeUid, 'inbox', id), cleaned).catch((err) =>
+      handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/inbox/${id}`)
+    );
   };
 
   const removeInboxItem = (id: string) => {
@@ -1272,7 +1343,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       userId: activeUid,
       createdTime: new Date().toISOString(),
     };
-    setDoc(doc(db, 'users', activeUid, 'importHistory', id), newRecord).catch((err) =>
+    const cleaned = sanitizeFirestoreData(newRecord);
+    console.log("FINAL FIRESTORE DOCUMENT", cleaned);
+    setDoc(doc(db, 'users', activeUid, 'importHistory', id), cleaned).catch((err) =>
       handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/importHistory/${id}`)
     );
     return id;
@@ -1280,7 +1353,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateImportHistoryRecord = (id: string, updates: Partial<ImportHistoryRecord>) => {
     if (!activeUid) return;
-    updateDoc(doc(db, 'users', activeUid, 'importHistory', id), updates).catch((err) =>
+    const cleaned = sanitizeFirestoreData(updates);
+    console.log("FINAL FIRESTORE DOCUMENT", cleaned);
+    updateDoc(doc(db, 'users', activeUid, 'importHistory', id), cleaned).catch((err) =>
       handleFirestoreError(err, OperationType.UPDATE, `users/${activeUid}/importHistory/${id}`)
     );
   };
@@ -1319,7 +1394,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       sourceUrl: update.sourceUrl,
     };
 
-    setDoc(doc(db, 'users', activeUid, 'tasks', id), newTask).catch((err) =>
+    const cleanedTask = sanitizeFirestoreData(newTask);
+    console.log("FINAL FIRESTORE DOCUMENT", cleanedTask);
+    setDoc(doc(db, 'users', activeUid, 'tasks', id), cleanedTask).catch((err) =>
       handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/tasks/${id}`)
     );
 
@@ -1366,7 +1443,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!activeUid) return;
     const updated = { ...settings, ...newSettings };
     setSettings(updated);
-    setDoc(doc(db, 'users', activeUid), { settings: updated }, { merge: true }).catch((err) =>
+    const cleaned = sanitizeFirestoreData({ settings: updated });
+    console.log("FINAL FIRESTORE DOCUMENT", cleaned);
+    setDoc(doc(db, 'users', activeUid), cleaned, { merge: true }).catch((err) =>
       handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}`)
     );
   };

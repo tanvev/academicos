@@ -81,6 +81,7 @@ export async function migrateLegacyDataToFirestore(targetUid: string): Promise<b
         if (!item || !item.id) continue;
         const itemDocRef = doc(db, 'users', targetUid, collName, String(item.id));
         const cleanedItem = sanitizeFirestoreData({ ...item, userId: targetUid });
+        console.log("FINAL FIRESTORE DOCUMENT", cleanedItem);
         await setDoc(itemDocRef, cleanedItem, { merge: true });
       }
     };
@@ -102,16 +103,14 @@ export async function migrateLegacyDataToFirestore(targetUid: string): Promise<b
 
     // Update main user profile document with settings and completion flags
     const userDocRef = doc(db, 'users', targetUid);
-    await setDoc(
-      userDocRef,
-      {
-        uid: targetUid,
-        settings,
-        legacyMigrationCompletedAt: new Date().toISOString(),
-        legacyMigrationVersion: 1,
-      },
-      { merge: true }
-    );
+    const migrationUserDoc = sanitizeFirestoreData({
+      uid: targetUid,
+      settings,
+      legacyMigrationCompletedAt: new Date().toISOString(),
+      legacyMigrationVersion: 1,
+    });
+    console.log("FINAL FIRESTORE DOCUMENT", migrationUserDoc);
+    await setDoc(userDocRef, migrationUserDoc, { merge: true });
 
     localStorage.setItem('academicos_legacy_migration_done', 'true');
     localStorage.setItem('academicos_legacy_migrated_to_uid', targetUid);
