@@ -962,18 +962,51 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addProgram = (p: Omit<Program, 'id'>) => {
     if (!activeUid) return;
     const id = `prog-${Date.now()}`;
-    const cleaned = sanitizeFirestoreData({ ...p, id, userId: activeUid });
-    console.log("FINAL FIRESTORE DOCUMENT", cleaned);
-    setDoc(doc(db, 'users', activeUid, 'programs', id), cleaned).catch((err) =>
+    const rawProgram: Record<string, any> = {
+      id,
+      userId: activeUid,
+      name: p.name || '',
+      type: p.type || 'other',
+      institution: p.institution ?? '',
+      startDate: p.startDate || new Date().toISOString().split('T')[0],
+      targetDate: p.targetDate || '',
+      description: p.description ?? '',
+      color: p.color || '#06b6d4',
+      accentColor: (p as any).accentColor ?? (p.color || '#06b6d4'),
+      icon: p.icon ?? null,
+      archived: p.archived ?? false,
+      weeklyTargetHours: p.weeklyTargetHours ?? null,
+      examDate: (p as any).examDate ?? null,
+    };
+    const cleanedProgram = sanitizeFirestoreData(rawProgram);
+    console.log("FINAL PROGRAM DOCUMENT", cleanedProgram);
+    setDoc(doc(db, 'users', activeUid, 'programs', id), cleanedProgram).catch((err) =>
       handleFirestoreError(err, OperationType.WRITE, `users/${activeUid}/programs/${id}`)
     );
   };
 
   const updateProgram = (id: string, p: Partial<Program>) => {
     if (!activeUid) return;
-    const cleaned = sanitizeFirestoreData(p);
-    console.log("FINAL FIRESTORE DOCUMENT", cleaned);
-    updateDoc(doc(db, 'users', activeUid, 'programs', id), cleaned).catch((err) =>
+    const existing = programs.find((prog) => prog.id === id);
+    const rawProgram: Record<string, any> = {
+      id,
+      userId: activeUid,
+      name: p.name ?? existing?.name ?? '',
+      type: p.type ?? existing?.type ?? 'other',
+      institution: p.institution ?? existing?.institution ?? '',
+      startDate: p.startDate ?? existing?.startDate ?? '',
+      targetDate: p.targetDate ?? existing?.targetDate ?? '',
+      description: p.description ?? existing?.description ?? '',
+      color: p.color ?? existing?.color ?? '#06b6d4',
+      accentColor: (p as any).accentColor ?? (existing as any)?.accentColor ?? (p.color || existing?.color || '#06b6d4'),
+      icon: p.icon ?? existing?.icon ?? null,
+      archived: p.archived ?? existing?.archived ?? false,
+      weeklyTargetHours: p.weeklyTargetHours ?? existing?.weeklyTargetHours ?? null,
+      examDate: (p as any).examDate ?? (existing as any)?.examDate ?? null,
+    };
+    const cleanedProgram = sanitizeFirestoreData(rawProgram);
+    console.log("FINAL PROGRAM DOCUMENT", cleanedProgram);
+    setDoc(doc(db, 'users', activeUid, 'programs', id), cleanedProgram).catch((err) =>
       handleFirestoreError(err, OperationType.UPDATE, `users/${activeUid}/programs/${id}`)
     );
   };

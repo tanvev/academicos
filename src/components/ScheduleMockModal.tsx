@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { X, Calendar, Clock, Award, Target, FileCheck, Layers } from 'lucide-react';
+import { X, Calendar, Clock, Award, Target, FileCheck, Layers, Trash2, AlertTriangle } from 'lucide-react';
 import { CATMock, CATSectional, RecurrenceType } from '../types';
 
 interface ScheduleMockModalProps {
@@ -18,7 +18,7 @@ export const ScheduleMockModal: React.FC<ScheduleMockModalProps> = ({
   existingMock,
   existingType,
 }) => {
-  const { programs, scheduleMock, updateCATMock, updateCATSectional } = useApp();
+  const { programs, scheduleMock, updateCATMock, updateCATSectional, deleteCATMock, deleteCATSectional } = useApp();
 
   const todayStr = new Date().toISOString().split('T')[0];
 
@@ -28,6 +28,12 @@ export const ScheduleMockModal: React.FC<ScheduleMockModalProps> = ({
   const [name, setName] = useState('');
   const [provider, setProvider] = useState('IMS');
   const [programId, setProgramId] = useState(programs[0]?.id || 'prog-cat-2026');
+
+  useEffect(() => {
+    if (programs.length > 0 && (!programId || !programs.some((p) => p.id === programId))) {
+      setProgramId(programs[0].id);
+    }
+  }, [programs, programId]);
   const [date, setDate] = useState(initialDate || todayStr);
   const [startTime, setStartTime] = useState('10:00 AM');
   const [durationMinutes, setDurationMinutes] = useState(120);
@@ -35,6 +41,7 @@ export const ScheduleMockModal: React.FC<ScheduleMockModalProps> = ({
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurrenceType, setRecurrenceType] = useState<RecurrenceType>('weekly');
   const [notes, setNotes] = useState('');
+  const [showConfirmDelete, setShowConfirmDelete] = useState(false);
 
   useEffect(() => {
     if (initialDate) {
@@ -317,20 +324,74 @@ export const ScheduleMockModal: React.FC<ScheduleMockModalProps> = ({
             />
           </div>
 
-          <div className="pt-2 flex justify-end gap-2 border-t border-zinc-800">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-xl text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="px-5 py-2 rounded-xl bg-purple-500 hover:bg-purple-400 text-zinc-950 font-bold transition-all shadow-md cursor-pointer"
-            >
-              {existingMock ? 'Save Rescheduled Date' : 'Schedule Mock'}
-            </button>
+          {showConfirmDelete && (
+            <div className="bg-rose-950/40 border border-rose-500/50 p-3.5 rounded-xl text-rose-200 space-y-2">
+              <div className="flex items-center gap-2 font-bold text-rose-300">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
+                <span>Confirm Deletion</span>
+              </div>
+              <p className="text-[11px] text-zinc-300">
+                Are you sure you want to delete this test? This will permanently remove the canonical document from Firestore.
+              </p>
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmDelete(false)}
+                  className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (existingMock) {
+                      if (existingType === 'sectional') {
+                        deleteCATSectional(existingMock.id);
+                      } else {
+                        deleteCATMock(existingMock.id);
+                      }
+                      setShowConfirmDelete(false);
+                      onClose();
+                    }
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold cursor-pointer flex items-center gap-1"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete Permanently</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="pt-2 flex items-center justify-between border-t border-zinc-800">
+            {existingMock && !showConfirmDelete ? (
+              <button
+                type="button"
+                onClick={() => setShowConfirmDelete(true)}
+                className="px-3.5 py-2 rounded-xl bg-rose-950/40 border border-rose-500/40 hover:bg-rose-900/60 text-rose-300 font-bold flex items-center gap-1.5 cursor-pointer text-xs"
+              >
+                <Trash2 className="w-4 h-4 text-rose-400" />
+                <span>Delete Test</span>
+              </button>
+            ) : (
+              <div />
+            )}
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 rounded-xl text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors cursor-pointer text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2 rounded-xl bg-purple-500 hover:bg-purple-400 text-zinc-950 font-bold transition-all shadow-md cursor-pointer text-xs"
+              >
+                {existingMock ? 'Save Rescheduled Date' : 'Schedule Mock'}
+              </button>
+            </div>
           </div>
         </form>
       </div>

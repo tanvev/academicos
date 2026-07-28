@@ -76,24 +76,24 @@ export const ProgramsView: React.FC = () => {
       updateProgram(editingProgId, {
         name: name.trim(),
         type,
-        institution: institution.trim() || undefined,
+        institution: institution.trim(),
         startDate,
         targetDate,
-        description: description.trim() || undefined,
+        description: description.trim(),
         color,
-        weeklyTargetHours: Number(weeklyHours),
+        weeklyTargetHours: Number(weeklyHours) || 0,
       });
     } else {
       addProgram({
         name: name.trim(),
         type,
-        institution: institution.trim() || undefined,
+        institution: institution.trim(),
         startDate,
         targetDate,
-        description: description.trim() || undefined,
+        description: description.trim(),
         color,
         archived: false,
-        weeklyTargetHours: Number(weeklyHours),
+        weeklyTargetHours: Number(weeklyHours) || 0,
       });
     }
     setIsModalOpen(false);

@@ -21,14 +21,16 @@ import {
   Tag,
   ExternalLink,
 } from 'lucide-react';
-import { Task, CATMock, CATSectional } from '../types';
+import { Task, CATMock, CATSectional, StudySession } from '../types';
 import { ScheduleMockModal } from '../components/ScheduleMockModal';
+import { EventDetailsModal, CalendarEventItem } from '../components/EventDetailsModal';
 
 export const TasksView: React.FC = () => {
   const {
     tasks,
     catMocks,
     catSectionals,
+    studySessions,
     programs,
     subjects,
     toggleTaskStatus,
@@ -46,6 +48,10 @@ export const TasksView: React.FC = () => {
   const [programFilter, setProgramFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'dueDate' | 'priority' | 'title'>('dueDate');
+
+  // Event Details Modal State
+  const [selectedCalendarEvent, setSelectedCalendarEvent] = useState<CalendarEventItem | null>(null);
+  const [isEventDetailsOpen, setIsEventDetailsOpen] = useState(false);
 
   // Schedule Mock Modal State
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
@@ -112,17 +118,8 @@ export const TasksView: React.FC = () => {
   }
 
   // Aggregate items for a specific date
-  const getItemsForDate = (dateStr: string) => {
-    const items: Array<{
-      id: string;
-      kind: 'task' | 'mock' | 'sectional' | 'analysis';
-      title: string;
-      date: string;
-      startTime?: string;
-      status: 'pending' | 'completed' | 'scheduled' | 'missed' | 'rescheduled';
-      badgeText?: string;
-      original: Task | CATMock | CATSectional;
-    }> = [];
+  const getItemsForDate = (dateStr: string): CalendarEventItem[] => {
+    const items: CalendarEventItem[] = [];
 
     // 1. Tasks
     if (calendarFilter === 'all' || calendarFilter === 'tasks') {
@@ -228,6 +225,24 @@ export const TasksView: React.FC = () => {
             status: 'pending',
             badgeText: 'ANALYSIS DUE',
             original: s,
+          });
+        });
+    }
+
+    // 4. Study Sessions
+    if (calendarFilter === 'all' || calendarFilter === 'tasks') {
+      studySessions
+        .filter((ss) => ss.date === dateStr)
+        .forEach((ss) => {
+          items.push({
+            id: ss.id,
+            kind: 'study_session',
+            title: `Study: ${ss.whatWasStudied || 'Session'}`,
+            date: ss.date,
+            startTime: ss.startTime,
+            status: 'completed',
+            badgeText: `${ss.durationMinutes}m`,
+            original: ss,
           });
         });
     }
@@ -425,7 +440,6 @@ export const TasksView: React.FC = () => {
                   <div className="space-y-1 my-1 overflow-y-auto max-h-[90px] custom-scrollbar pr-0.5">
                     {dayItems.map((item) => {
                       if (item.kind === 'mock') {
-                        const m = item.original as CATMock;
                         const isMissed = item.status === 'missed';
                         const isCompleted = item.status === 'completed';
 
@@ -440,8 +454,8 @@ export const TasksView: React.FC = () => {
                                 : 'bg-purple-950/40 border-purple-500/50 text-purple-200 hover:bg-purple-900/50'
                             }`}
                             onClick={() => {
-                              setEditingMockItem({ mock: m, type: 'mock' });
-                              setIsScheduleModalOpen(true);
+                              setSelectedCalendarEvent(item);
+                              setIsEventDetailsOpen(true);
                             }}
                           >
                             <div className="flex items-center justify-between gap-1">
@@ -463,7 +477,6 @@ export const TasksView: React.FC = () => {
                       }
 
                       if (item.kind === 'sectional') {
-                        const sec = item.original as CATSectional;
                         const isMissed = item.status === 'missed';
                         const isCompleted = item.status === 'completed';
 
@@ -478,8 +491,8 @@ export const TasksView: React.FC = () => {
                                 : 'bg-amber-950/40 border-amber-500/50 text-amber-200 hover:bg-amber-900/50'
                             }`}
                             onClick={() => {
-                              setEditingMockItem({ mock: sec, type: 'sectional' });
-                              setIsScheduleModalOpen(true);
+                              setSelectedCalendarEvent(item);
+                              setIsEventDetailsOpen(true);
                             }}
                           >
                             <div className="flex items-center justify-between gap-1">
@@ -493,20 +506,39 @@ export const TasksView: React.FC = () => {
                       }
 
                       if (item.kind === 'analysis') {
-                        const isMock = 'overallScore' in item.original || 'varc' in item.original;
                         return (
                           <div
                             key={item.id}
                             className="p-1.5 rounded-xl text-[10px] border border-sky-500/50 bg-sky-950/40 text-sky-200 hover:bg-sky-900/50 cursor-pointer transition-all"
                             onClick={() => {
-                              setEditingMockItem({ mock: item.original as any, type: isMock ? 'mock' : 'sectional' });
-                              setIsScheduleModalOpen(true);
+                              setSelectedCalendarEvent(item);
+                              setIsEventDetailsOpen(true);
                             }}
                           >
                             <div className="flex items-center justify-between gap-1">
                               <span className="font-bold truncate">{item.title}</span>
                               <span className="text-[8px] font-mono shrink-0 px-1 rounded bg-sky-900/80 text-sky-200 font-bold">
                                 ANALYSIS
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      if (item.kind === 'study_session') {
+                        return (
+                          <div
+                            key={item.id}
+                            className="p-1.5 rounded-xl text-[10px] border border-emerald-500/40 bg-emerald-950/30 text-emerald-200 hover:bg-emerald-900/50 cursor-pointer transition-all"
+                            onClick={() => {
+                              setSelectedCalendarEvent(item);
+                              setIsEventDetailsOpen(true);
+                            }}
+                          >
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="font-bold truncate">{item.title}</span>
+                              <span className="text-[9px] font-mono shrink-0 px-1 rounded bg-black/40">
+                                {item.badgeText}
                               </span>
                             </div>
                           </div>
@@ -521,13 +553,17 @@ export const TasksView: React.FC = () => {
                       return (
                         <div
                           key={item.id}
-                          className={`p-1 rounded-lg text-[9.5px] border flex items-center justify-between gap-1 ${
+                          className={`p-1 rounded-lg text-[9.5px] border flex items-center justify-between gap-1 cursor-pointer transition-all ${
                             isCompleted
                               ? 'bg-zinc-950/60 border-zinc-800 text-zinc-500 line-through'
                               : isOverdue
-                              ? 'bg-rose-950/20 border-rose-500/30 text-rose-300'
-                              : 'bg-cyan-950/30 border-cyan-500/30 text-cyan-200'
+                              ? 'bg-rose-950/20 border-rose-500/30 text-rose-300 hover:bg-rose-900/40'
+                              : 'bg-cyan-950/30 border-cyan-500/30 text-cyan-200 hover:bg-cyan-900/40'
                           }`}
+                          onClick={() => {
+                            setSelectedCalendarEvent(item);
+                            setIsEventDetailsOpen(true);
+                          }}
                         >
                           <span className="truncate">{t.title}</span>
                           <input
@@ -537,7 +573,7 @@ export const TasksView: React.FC = () => {
                               e.stopPropagation();
                               toggleTaskStatus(t.id);
                             }}
-                            className="w-3 h-3 rounded text-cyan-500 bg-zinc-900 cursor-pointer"
+                            className="w-3 h-3 rounded text-cyan-500 bg-zinc-900 cursor-pointer shrink-0"
                           />
                         </div>
                       );
@@ -693,6 +729,20 @@ export const TasksView: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Event Details Modal */}
+      <EventDetailsModal
+        isOpen={isEventDetailsOpen}
+        onClose={() => {
+          setIsEventDetailsOpen(false);
+          setSelectedCalendarEvent(null);
+        }}
+        event={selectedCalendarEvent}
+        onEditMock={(mock, type) => {
+          setEditingMockItem({ mock, type });
+          setIsScheduleModalOpen(true);
+        }}
+      />
 
       {/* Schedule Mock Modal */}
       <ScheduleMockModal
